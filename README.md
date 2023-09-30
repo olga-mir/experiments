@@ -14,3 +14,14 @@ Some fields are dynamic or private, they are templated out by env vars.
 ```
 envsubst < alpine-targeted-node-tmpl.yaml > alpine-targeted-node-rendered.yaml
 ```
+
+ To render all tmpl found in the repo run [scripts/render.sh](./scripts/render.sh) from any location in repo dir and apply file that ends with `-rendered.yaml`
+
+
+## Private Image Registry
+
+Login to ECR and create docker login secret in $NAMESPACE (if not set or provided in command line default `test` is used):
+
+```
+./scripts/login-private-registry.sh [NAMEPACE]
+```
