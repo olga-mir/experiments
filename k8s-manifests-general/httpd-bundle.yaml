@@ -54,9 +54,6 @@ metadata:
   name: httpd-a
   namespace: httpd
 spec:
-  clusterIP: 100.67.170.97
-  clusterIPs:
-  - 100.67.170.97
   internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
