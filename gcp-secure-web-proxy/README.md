@@ -296,3 +296,7 @@ Example denied:
 ```
 
 </details>
+
+# Cleanup
+
+[scripts/disable-apis.sh](./scripts/disable-apis.sh)
