@@ -11,15 +11,17 @@ Current example only shows very basic usage of a pod in GKE cluster connecting t
 
 The docs are fairly straight forward for the basic POC: https://cloud.google.com/secure-web-proxy/docs/initial-setup-steps
 
-# Deploy GKE Cluster
+# Deployment
+
+## Deploy GKE Cluster
 
 Any GKE cluster will do, I'm using this https://github.com/olga-mir/k8s/blob/main/gcp/gcloud/dpv2-create-gke-with-o11y.sh
 
-# Deploy SWP
+## Deploy SWP
 
 using script [./scripts/deploy.sh](./scripts/deploy.sh)
 
-# Deploy Test Pod
+## Deploy Test Pod
 
 Test pod is configured to route outgoing connections and it will perform two curl requests - one to allowed destination and one to a url which was not configured on the the SWP. The first request will result in 200, and the second one in 403.
 
@@ -50,7 +52,7 @@ This example does not test auth
 
 In this file [./pod-with-proxy-logs.txt](./pod-with-proxy-logs.txt) or below in expand section.
 
-Snippet of `curl` output for a connection which was not allowed:
+Snippet of `curl` output for a connection which was not allowed (`10.0.0.9` is my SWP IP address):
 
 ```
 * Connection #0 to host 10.0.0.9 left intact
