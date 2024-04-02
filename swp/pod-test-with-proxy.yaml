@@ -7,10 +7,11 @@ spec:
   - name: curl-container
     image: curlimages/curl
     env:
+      - name: HTTP_PROXY
+        value: "http://10.0.0.9:443"
       - name: HTTPS_PROXY
         value: "http://10.0.0.9:443"
       - name: NO_PROXY
-        value: "localhost,127.0.0.1,.example.com"
+        value: "localhost,127.0.0.1"
     command: ["/bin/sh"]
-    args: ["-c","curl -v https://en.wikipedia.org/wiki/Kubernetes", "curl -v http://httpbin.org/ip", "curl -v https://api.ipify.org", sleep infinity]
-
+    args: ["-c", "(curl -fvs https://wikipedia.org --proxy-insecure || true) && (curl -fsv https://api.ipify.org || true) && sleep infinity"]
