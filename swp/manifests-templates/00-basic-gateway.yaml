@@ -1,0 +1,9 @@
+name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gateways/00-basic-swp
+type: SECURE_WEB_GATEWAY
+addresses: ["10.128.0.99"]
+ports: [443]
+certificateUrls: ["projects/$GCP_PROJECT_ID/locations/$GCP_REGION/certificates/00-basic-cert"]
+gatewaySecurityPolicy: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/00-basic-policy
+network: projects/$GCP_PROJECT_ID/global/networks/$VPC_NAME
+subnetwork: projects/$GCP_PROJECT_ID/regions/$GCP_REGION/subnetworks/$SUBNET_NAME
+scope: samplescope

@@ -1,2 +1,2 @@
-.setup-env
+*.setup-env*
 *rendered*
