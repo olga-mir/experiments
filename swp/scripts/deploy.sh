@@ -17,7 +17,7 @@ proxy_range="172.16.0.0/26"
 TEMPLATES="../manifests-templates"
 RENDERED="../manifests-rendered"
 
-export experiment_name
+export experiment_name vpc_name subnet_name
 
 for template in "$TEMPLATES"/*; do
   filename=$(basename "$template")
