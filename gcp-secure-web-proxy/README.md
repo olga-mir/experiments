@@ -23,7 +23,7 @@ using script [./scripts/deploy.sh](./scripts/deploy.sh)
 
 Test pod is configured to route outgoing connections and it will perform two curl requests - one to allowed destination and one to a url which was not configured on the the SWP. The first request will result in 200, and the second one in 403.
 
-Test pod config, (`10.0.0.9` is the IP of the SWP):
+Test pod config, (`10.0.0.9` is the IP of the SWP). Full manifest can be found [here](./pod-test-with-proxy.yaml)
 ```yaml
   - name: curl-container
     image: curlimages/curl
@@ -41,6 +41,7 @@ Test pod config, (`10.0.0.9` is the IP of the SWP):
 # Results
 
 200 for allowed URL
+
 403 for URL which was not whitelisted
 
 This example does not test auth
@@ -64,7 +65,7 @@ Snippet of `curl` output for a connection which was not allowed:
 ```
 
 <details>
-  <summary>Click to see pods logs:</summary>
+  <summary>Click to see pod's logs</summary>
 
 ```bash
 * Uses proxy env variable NO_PROXY == 'localhost,127.0.0.1'
@@ -189,12 +190,13 @@ Snippet of `curl` output for a connection which was not allowed:
 <
 * The requested URL returned error: 403
 * Closing connection
-
 ```
 
 </details>
 
-## Access logs
+
+
+## SWP Access Logs Validation
 
 Navigate to Logs Explorer and use filter:
 ```
@@ -202,7 +204,7 @@ resource.type="networkservices.googleapis.com/Gateway"
 ```
 
 <details>
-  <summary>Click to see example of ALLOWED connection request:</summary>
+  <summary>Click to see example of ALLOWED connection request</summary>
 
 ```json
 {
@@ -248,7 +250,6 @@ resource.type="networkservices.googleapis.com/Gateway"
 ```
 </details>
 
-Example denied:
 
 <details>
   <summary>Click to see example of DENIED connection request:</summary>
