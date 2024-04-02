@@ -5,7 +5,8 @@ set -eoux pipefail
 # https://cloud.google.com/secure-web-proxy/docs/overview
 # https://cloud.google.com/secure-web-proxy/docs/initial-setup-steps
 
-experiment_name="00-basic"
+# resource name should start with a letter and can only have lowercase letters, numbers, hyphens and at most 63 characters
+experiment_name="basic"
 
 vpc_name=$CLUSTER_VPC # sourced in env vars
 subnet_name=$CLUSTER_SUBNET
@@ -35,14 +36,14 @@ gateway_yaml=$RENDERED/${experiment_name}-gateway.yaml
 # gcloud compute networks create $vpc_name --subnet-mode=custom
 # gcloud compute networks subnets create $subnet_name --range=$primary_range --network=$vpc_name --region=$GCP_REGION
 
-gcloud compute networks subnets create $proxy_subnet_name --purpose=REGIONAL_MANAGED_PROXY --role=ACTIVE --region=$GCP_REGION --network=$vpc_name --range=$proxy_range
+# gcloud compute networks subnets create $proxy_subnet_name --purpose=REGIONAL_MANAGED_PROXY --role=ACTIVE --region=$GCP_REGION --network=$vpc_name --range=$proxy_range
 
 
 # ---------------- Certificates
 
 key_path="$HOME/.swp/key.pem"
 cert_path="$HOME/.swp/cert.pem"
-cert_name="${name}-cert"
+cert_name="${experiment_name}-cert"
 SWP_HOST_NAME="myswp.example.com"
 
 # openssl req -x509 -newkey rsa:2048 \
