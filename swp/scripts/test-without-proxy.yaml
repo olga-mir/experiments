@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: curl-wikipedia
+spec:
+  containers:
+  - name: curl-container
+    image: curlimages/curl
+    command: ["/bin/sh"]
+    args: ["-c", "curl -v https://en.wikipedia.org/wiki/Kubernetes" && sleep infinity]
+
