@@ -4,6 +4,8 @@ set -x
 
 gcloud certificate-manager certificates delete basic-cert --location=$GCP_REGION -q
 
-gcloud services disable networksecurity.googleapis.com
-gcloud services disable certificatemanager.googleapis.com
-gcloud services disable networkservices.googleapis.com
+gcloud services disable --force networksecurity.googleapis.com
+gcloud services disable --force networkservices.googleapis.com
+
+sleep 200
+gcloud services disable --force certificatemanager.googleapis.com

@@ -1,0 +1,7 @@
+name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/${experiment_name}-policy/rules/allow-wikipedia-org
+description: Allow wikipedia for specific service account
+enabled: true
+priority: 1
+basicProfile: ALLOW
+sessionMatcher: host() == 'wikipedia.org' && source.matchServiceAccount('${gsa_email}')
+

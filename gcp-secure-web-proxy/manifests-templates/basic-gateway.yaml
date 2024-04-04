@@ -1,6 +1,6 @@
 name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gateways/${experiment_name}-swp
 type: SECURE_WEB_GATEWAY
-addresses: ["10.128.0.99"]
+addresses: ["10.0.0.9"]
 ports: [443]
 certificateUrls: ["projects/$GCP_PROJECT_ID/locations/$GCP_REGION/certificates/${experiment_name}-cert"]
 gatewaySecurityPolicy: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/${experiment_name}-policy
