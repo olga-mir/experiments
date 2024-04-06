@@ -1,0 +1,7 @@
+name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/$policy_name/rules/allow-wikipedia-org-with-auth
+description: Allow wikipedia for specific service account
+enabled: true
+priority: 1
+basicProfile: ALLOW
+sessionMatcher: host() == 'wikipedia.org' && source.matchServiceAccount('$sa')
+

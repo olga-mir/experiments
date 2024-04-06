@@ -1,2 +1,0 @@
-description: Policy to allow .com traffic, then (/index.html), and finally TLS.
-name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/${experiment_name}-policy
