@@ -1,202 +1,221 @@
 
-# Testing GCP Secure Web Proxy (SWP)
+# GCP Secure Web Proxy (SWP)
 
-## Goal
+## Purpose
 
 Test integration between GKE and SWP.
 
-## Current state
+*In scope*: Exploring `SessionMatcher` and `ApplicationMatcher` capabilities of SWP, in particular tags and Service Accounts
+*Out of scope*: Routing, cross-project, cross-vpc. In this scenario GKE, VMs and SWP are all deployed in the same subnet
 
-Current example only shows very basic usage of a pod in GKE cluster connecting to outside internet via SWP. It does not include any TLS features, auth, etc
+As of now GKE WLI is not supported in SWP and there is no public information when it might be, latest confirmation from Google staff in googlecommunity dated Feb 2024. [Post](https://www.googlecloudcommunity.com/gc/General-Misc-Q-A/How-do-Secure-Web-Proxy-rules-filter-requests-sent-by-containers/m-p/615769#M1189)
 
-The docs are fairly straight forward for the basic POC: https://cloud.google.com/secure-web-proxy/docs/initial-setup-steps
-
-# Deployment
-
-## Deploy GKE Cluster
-
-Any GKE cluster will do, I'm using this https://github.com/olga-mir/k8s/blob/main/gcp/gcloud/dpv2-create-gke-with-o11y.sh
 
 ## Deploy SWP
 
-using script [./scripts/deploy.sh](./scripts/deploy.sh)
+Deployment script [./scripts/deploy.sh](./scripts/deploy.sh)
 
-## Deploy Test Pod
+```
+% ./scripts/deploy.sh all
+```
 
-Test pod is configured to route outgoing connections and it will perform two curl requests - one to allowed destination and one to a url which was not configured on the the SWP. The first request will result in 200, and the second one in 403.
+## VM Test
 
-Test pod config, (`10.0.0.9` is the IP of the SWP). Full manifest can be found [here](./pod-test-with-proxy.yaml)
+See in [test-swp-with-vm-sa.md](./test-swp-with-vm-sa.md)
+
+## GKE
+
+Deploy a GKE cluster. Any GKE cluster with WLI will do, I'm using a cluster from other project: https://github.com/olga-mir/k8s/blob/main/gcp/gcloud/dpv2-create-gke-with-o11y.sh
+
+Test pods are found in this folder starting with `pod-*` and there are 4 flavours:
+
+* limited / priv - this is distingushes between priorities granted to the pod's SA. limited pod has no roles associated with its account and is used to prove that it can't access something while the `priv` one can (priv is short for privileged, I admit the terminology is confusing)
+* ksa2gsa / federated - There are two ways to configure WLI in GKE. Explicit GCP SA (GSA) with explicit linking of KSA to GSA via annotation on KSA resource is the original WLI approach, but in a newer Federated way there is no need to create a GSA and link it, instead a principal with a URI which encodes information about KSA can be used in GCP IAM policies. For more info https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity
+
+Test pods are configured with proxy env and contain gcloud, [example pod](./pod-limited-sa.yaml)
+
+<details>
+  <summary>yaml snippet</summary>
+
 ```yaml
-  - name: curl-container
-    image: curlimages/curl
+  - name: test
+    image: google/cloud-sdk:slim
     env:
       - name: HTTP_PROXY
         value: "http://10.0.0.9:443"
       - name: HTTPS_PROXY
         value: "http://10.0.0.9:443"
       - name: NO_PROXY
-        value: "localhost,127.0.0.1"
+        value: "localhost,127.0.0.1,metadata.google.internal,.googleapis.com,accounts.google.com"
     command: ["/bin/sh"]
-    args: ["-c", "(curl -fvs https://wikipedia.org --proxy-insecure || true) && (curl -fsv https://api.ipify.org || true) && sleep infinity"]
+    args:
+      - -c
+      - |
+        set -x
+        (curl -fvs https://wikipedia.org || true) &&
+        (curl -fsv https://api.ipify.org || true) &&
+        sleep infinity
+```
+</details>
+
+
+### No Auth
+
+In this file [.logs/pod-with-proxy-logs.txt](./logs/pod-with-proxy-logs.txt) or below in expand section. In this test we have only one rule which allows connection to wikipedia.org for anybody.
+```
+sessionMatcher: host() == 'wikipedia.org'
 ```
 
-# Results
-
-200 for allowed URL
-
-403 for URL which was not whitelisted
-
-This example does not test auth
-
-## Pod logs
-
-In this file [./pod-with-proxy-logs.txt](./pod-with-proxy-logs.txt) or below in expand section.
-
-Snippet of `curl` output for a connection which was not allowed (`10.0.0.9` is my SWP IP address):
+From above logs, allowed connection (to wikipedia.org):
 
 ```
-* Connection #0 to host 10.0.0.9 left intact
-* Uses proxy env variable NO_PROXY == 'localhost,127.0.0.1'
 * Uses proxy env variable HTTPS_PROXY == 'http://10.0.0.9:443'
 *   Trying 10.0.0.9:443...
 * Connected to 10.0.0.9 (10.0.0.9) port 443
 * CONNECT tunnel: HTTP/1.1 negotiated
-* allocate connect buffer
-* Establish HTTP proxy tunnel to api.ipify.org:443
-> CONNECT api.ipify.org:443 HTTP/1.1
-```
-
-<details>
-  <summary>Click to see pod's logs</summary>
-
-```bash
-* Uses proxy env variable NO_PROXY == 'localhost,127.0.0.1'
-* Uses proxy env variable HTTPS_PROXY == 'http://10.0.0.9:443'
-*   Trying 10.0.0.9:443...
-* Connected to 10.0.0.9 (10.0.0.9) port 443
-* CONNECT tunnel: HTTP/1.1 negotiated
-* allocate connect buffer
-* Establish HTTP proxy tunnel to wikipedia.org:443
-> CONNECT wikipedia.org:443 HTTP/1.1
 > Host: wikipedia.org:443
-> User-Agent: curl/8.7.1
-> Proxy-Connection: Keep-Alive
 >
 < HTTP/1.1 200 OK
-< date: Tue, 02 Apr 2024 10:32:38 GMT
-<
-* CONNECT phase completed
-* CONNECT tunnel established, response 200
-* ALPN: curl offers h2,http/1.1
-} [5 bytes data]
-* TLSv1.3 (OUT), TLS handshake, Client hello (1):
-} [512 bytes data]
-*  CAfile: /cacert.pem
-*  CApath: /etc/ssl/certs
-{ [5 bytes data]
-* TLSv1.3 (IN), TLS handshake, Server hello (2):
-{ [122 bytes data]
-* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
-{ [19 bytes data]
-* TLSv1.3 (IN), TLS handshake, Certificate (11):
-{ [3196 bytes data]
-* TLSv1.3 (IN), TLS handshake, CERT verify (15):
-{ [78 bytes data]
-* TLSv1.3 (IN), TLS handshake, Finished (20):
-{ [52 bytes data]
-* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
-} [1 bytes data]
-* TLSv1.3 (OUT), TLS handshake, Finished (20):
-} [52 bytes data]
-* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519 / id-ecPublicKey
-* ALPN: server accepted h2
-* Server certificate:
-*  subject: C=US; ST=California; L=San Francisco; O=Wikimedia Foundation, Inc.; CN=*.wikipedia.org
-*  start date: Oct 18 00:00:00 2023 GMT
-*  expire date: Oct 16 23:59:59 2024 GMT
-*  subjectAltName: host "wikipedia.org" matched cert's "wikipedia.org"
-*  issuer: C=US; O=DigiCert Inc; CN=DigiCert TLS Hybrid ECC SHA384 2020 CA1
-*  SSL certificate verify ok.
-*   Certificate level 0: Public key type EC/prime256v1 (256/128 Bits/secBits), signed using ecdsa-with-SHA384
-*   Certificate level 1: Public key type EC/secp384r1 (384/192 Bits/secBits), signed using sha384WithRSAEncryption
-*   Certificate level 2: Public key type RSA (2048/112 Bits/secBits), signed using sha1WithRSAEncryption
-} [5 bytes data]
-* using HTTP/2
-* [HTTP/2] [1] OPENED stream for https://wikipedia.org/
-* [HTTP/2] [1] [:method: GET]
-* [HTTP/2] [1] [:scheme: https]
-* [HTTP/2] [1] [:authority: wikipedia.org]
-* [HTTP/2] [1] [:path: /]
-* [HTTP/2] [1] [user-agent: curl/8.7.1]
-* [HTTP/2] [1] [accept: */*]
-} [5 bytes data]
-> GET / HTTP/2
-> Host: wikipedia.org
-> User-Agent: curl/8.7.1
-> Accept: */*
->
-* Request completely sent off
-{ [5 bytes data]
-* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
-{ [249 bytes data]
-* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
-{ [249 bytes data]
-* old SSL session ID is stale, removing
-{ [5 bytes data]
-<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
-<html><head>
-<title>301 Moved Permanently</title>
-</head><body>
-<h1>Moved Permanently</h1>
-<p>The document has moved <a href="https://www.wikipedia.org/">here</a>.</p>
-</body></html>
+
 < HTTP/2 301
-< date: Mon, 01 Apr 2024 20:06:52 GMT
 < server: mw-web.codfw.main-6cf7d57b97-qwdss
 < location: https://www.wikipedia.org/
 < content-length: 234
-< content-type: text/html; charset=iso-8859-1
-< vary: X-Forwarded-Proto
-< age: 51946
-< x-cache: cp5018 miss, cp5018 hit/129061
-< x-cache-status: hit-front
-< server-timing: cache;desc="hit-front", host;desc="cp5018"
-< strict-transport-security: max-age=106384710; includeSubDomains; preload
-< report-to: { "group": "wm_nel", "max_age": 604800, "endpoints": [{ "url": "https://intake-logging.wikimedia.org/v1/events?stream=w3c.reportingapi.network_error&schema_uri=/w3c/reportingapi/network_error/1.0.0" }] }
-< nel: { "report_to": "wm_nel", "max_age": 604800, "failure_fraction": 0.05, "success_fraction": 0.0}
-< set-cookie: WMF-Last-Access=02-Apr-2024;Path=/;HttpOnly;secure;Expires=Sat, 04 May 2024 00:00:00 GMT
-< set-cookie: WMF-Last-Access-Global=02-Apr-2024;Path=/;Domain=.wikipedia.org;HttpOnly;secure;Expires=Sat, 04 May 2024 00:00:00 GMT
-< x-client-ip: 34.40.134.122
-< set-cookie: GeoIP=AU:NSW:Sydney:-33.87:151.20:v4; Path=/; secure; Domain=.wikipedia.org
-< set-cookie: NetworkProbeLimit=0.001;Path=/;Secure;Max-Age=3600
-<
+...
 { [234 bytes data]
+```
+
+Snippets of logs showing connection denied by proxy (because there was no rule allowing the URL):
+
+```
 * Connection #0 to host 10.0.0.9 left intact
-* Uses proxy env variable NO_PROXY == 'localhost,127.0.0.1'
 * Uses proxy env variable HTTPS_PROXY == 'http://10.0.0.9:443'
 *   Trying 10.0.0.9:443...
 * Connected to 10.0.0.9 (10.0.0.9) port 443
 * CONNECT tunnel: HTTP/1.1 negotiated
-* allocate connect buffer
-* Establish HTTP proxy tunnel to api.ipify.org:443
+
 > CONNECT api.ipify.org:443 HTTP/1.1
 > Host: api.ipify.org:443
-> User-Agent: curl/8.7.1
-> Proxy-Connection: Keep-Alive
 >
 < HTTP/1.1 403 Forbidden
-< content-length: 13
-< content-type: text/plain
-< date: Tue, 02 Apr 2024 10:32:39 GMT
-< connection: close
 <
 * The requested URL returned error: 403
 * Closing connection
 ```
 
+### Federated Workload Identity (WLI)
+
+There is nothing to test in context of SWP, because there is no explicit GSA and there is no way to use principals in SWP CEL.
+
+This can be used to explore the federated WLI feature of GKE. Deploy k8s mainfests and grant permissions to a test role:
+
+```bash
+% ./scripts/deploy.sh test_federated_wli
+```
+
+### WLI with KSA to GSA Mapping
+
+Deploy k8s mainfests, create GSA and link the Service accounts
+
+```bash
+% ./scripts/deploy.sh test_wli
+```
+
+Create the pods and test that WLI has been setup correctly inside the pod:
+```
+% k apply -f pod-limited-sa-ksa2gsa.yaml
+% k apply -f pod-priv-sa-ksa2gsa.yaml
+```
+
+Inside the pod check the WLI email and test that a bucket can be accessed (the perms were assigned in deploy script):
+```
+% k exec -it pod-priv-sa-ksa2gsa -- /bin/bash
+root@pod-priv-sa-ksa2gsa:/#  curl -X GET -H "Authorization: Bearer $(gcloud auth print-access-token)" https://storage.googleapis.com/storage/v1/b/gobin-gopls/o
+{
+  "kind": "storage#objects"
+}
+root@pod-priv-sa-ksa2gsa:/# curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email
+demo-app-priv-sa-ksa2gsa@PROJECT_ID_REDACTED.iam.gserviceaccount.comroot@pod-priv-sa-ksa2gsa:/#
+```
+
+The GKE WLI is not expected to work at this stage, but some testing still. I've run the curl test when the SWP had only one rule
+```
+host() == 'wikipedia.org' && source.matchServiceAccount('demo-app-priv-sa-ksa2gsa@PROJECT_ID_REDACTED.iam.gserviceaccount.com')
+```
+And it was indeed dined by proxy, even though the WLI test described above was working successfully.
+
+Adding a non-auth rule at lower priority and retrying the curl request confirms that auth rule is tested but didn't match and gateway access logs confirm that no-auth rule was matched and connection allowed:
+
+```
+root@pod-priv-sa-ksa2gsa:/# curl -fsv --proxy $HTTP_PROXY http://wikipedia.org
+* Uses proxy env variable NO_PROXY == 'localhost,127.0.0.1,metadata.google.internal,.googleapis.com,accounts.google.com'
+*   Trying 10.0.0.9:443...
+* Connected to 10.0.0.9 (10.0.0.9) port 443 (#0)
+> GET http://wikipedia.org/ HTTP/1.1
+> Host: wikipedia.org
+>
+< HTTP/1.1 301 Moved Permanently
+< content-length: 0
+< location: https://wikipedia.org/
+< server: HAProxy
+< date: Sun, 07 Apr 2024 03:59:09 GMT
+```
+
+Rules at the SWP at this test:
+
+```
+% gcloud network-security gateway-security-policies rules list  --gateway-security-policy swp-policy --location=$GCP_REGION
+NAME
+rule-300-no-auth
+rule-200-with-auth
+%
+% gcloud network-security gateway-security-policies rules export rule-300-no-auth --gateway-security-policy swp-policy --location=$GCP_REGION | yq '.priority, .sessionMatcher'
+300
+host() == 'wikipedia.org'
+% gcloud network-security gateway-security-policies rules export rule-200-with-auth --gateway-security-policy swp-policy --location=$GCP_REGION | yq '.priority, .sessionMatcher'
+200
+host() == 'wikipedia.org' && source.matchServiceAccount('demo-app-priv-sa-ksa2gsa@PROJECT_ID_REDACTED.iam.gserviceaccount.com')
+```
+
+Access logs `networkservices.googleapis.com/Gateway`:
+```
+action: "ALLOWED"
+name: "projects/PROJECT_NUMBER_REDACTED>/locations/australia-southeast1/gatewaySecurityPolicies/swp-policy/rules/rule-300-no-auth"
+```
+
+Testing the same SA from VM (creating VM as in section above and giving it the same GSA as in the GKE test pod), the connection succeeded by the auth rule:
+```
+action: "ALLOWED"
+name: "projects/PROJECT_NUMBER_REDACTED>/locations/australia-southeast1/gatewaySecurityPolicies/swp-policy/rules/rule-200-with-auth"
+```
+
+<details>
+  <summary>Connection logs on VM</summary>
+
+```
+olga@test-vm-swp-with-sa:~$ curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email
+demo-app-priv-sa-ksa2gsa@PROJECT_ID_REDACTED.iam.gserviceaccount.comolga@test-vm-swp-with-sa:~$
+olga@test-vm-swp-with-sa:~$ curl -vfs --proxy http://10.0.0.9:443  wikipedia.org
+*   Trying 10.0.0.9:443...
+* Connected to 10.0.0.9 (10.0.0.9) port 443 (#0)
+> GET http://wikipedia.org/ HTTP/1.1
+> Host: wikipedia.org
+> User-Agent: curl/7.74.0
+> Accept: */*
+> Proxy-Connection: Keep-Alive
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 301 Moved Permanently
+< content-length: 0
+< location: https://wikipedia.org/
+< server: HAProxy
+< x-cache: cp5024 int
+< x-cache-status: int-tls
+< date: Sun, 07 Apr 2024 04:15:55 GMT
+<
+* Connection #0 to host 10.0.0.9 left intact
+```
 </details>
-
-
 
 ## SWP Access Logs Validation
 
@@ -302,4 +321,14 @@ resource.type="networkservices.googleapis.com/Gateway"
 
 # Cleanup
 
-[scripts/disable-apis.sh](./scripts/disable-apis.sh)
+TODO - replace with Taskfile
+Use "cleanup": [scripts/deploy.sh](./scripts/deploy.sh)
+
+```bash
+$ ./scripts/deploy.sh cleanup
+```
+
+Reference:
+
+* [CEL](https://cloud.google.com/secure-web-proxy/docs/cel-matcher-language-reference#available-attributes-in-sessionmatcher-and-applicationmatcher)
+* [Official doc for SWP installation](https://cloud.google.com/secure-web-proxy/docs/initial-setup-steps)

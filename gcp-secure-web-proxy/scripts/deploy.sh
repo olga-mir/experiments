@@ -14,24 +14,24 @@ SA_NAME_LIMITED="demo-app-limited-sa-ksa2gsa"
 gsa_email_priv="$SA_NAME_PRIV@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 gsa_email_limited="$SA_NAME_LIMITED@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
+# gcloud: resource id must consists of no more than 63 characters: lower case letters, digits and hyphens
+
+# 1 Gateway : 1 Policy : N Rules
+policy_name=swp-policy
+cert_name=swp-cert
 # BUCKET="" - this is needed for test for WLI
 
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 TEMPLATES="$SCRIPT_DIR/../manifests-templates"
 RENDERED="$SCRIPT_DIR/../manifests-rendered"
 
-export vpc_name subnet_name sa
+sa=$gsa_email_priv
+export vpc_name subnet_name sa policy_name
 
 for template in "$TEMPLATES"/*; do
   filename=$(basename "$template")
   envsubst < "$template" > "$RENDERED/$filename"
 done
-
-# gcloud: resource id must consists of no more than 63 characters: lower case letters, digits and hyphens
-
-# 1 Gateway : 1 Policy : N Rules
-policy_name=swp-policy
-cert_name=swp-cert
 
 set -x
 
@@ -147,6 +147,9 @@ install_proxy() {
 test_federated_wli() {
   # source: https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#verify
 
+  # Create namespace and k8s SAs
+  kubectl apply -f $SCRIPT_DIR/../wli-federated-manifests.yaml
+
   KSA_NAME="demo-app-priv-sa"
   gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
       --role=roles/storage.objectViewer \
@@ -156,41 +159,38 @@ test_federated_wli() {
   echo then run this in the pod:
   echo "curl -X GET -H \"Authorization: Bearer \$(gcloud auth print-access-token)\" https://storage.googleapis.com/storage/v1/b/$BUCKET/o"
   # Expect to see { "kind": "storage#objects" } if the response is 403 then WLI is not configured on the cluster (provided the bucket indeed exists in the correct location)
-
-  kubectl apply -f $SCRIPT_DIR/../wli-federated-manifests.yaml
 }
 
 # ----------------   WLI - Non-Federated (KSA to GSA mapping)
 test_wli() {
   # source: https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#kubernetes-sa-to-iam
+
+  kubectl apply -f $SCRIPT_DIR/../wli-k8s2gsa-manifests.yaml
+
   gcloud iam service-accounts create $SA_NAME_PRIV --project=$GCP_PROJECT_ID
   gcloud iam service-accounts create $SA_NAME_LIMITED --project=$GCP_PROJECT_ID
 
   # For testing purposes grant access to a bucket only to 'priv' SA
   gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
-    --member "serviceAccount:$SA_NAME_PRIV@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+    --member "serviceAccount:$gsa_email_priv" \
     --role=roles/storage.objectViewer
 
   # Grant ability to use WLI for both SAs (the limitness of the limited pod is in the actual perms to do stuff
   # and access rules in SWP, but not in its usage of WLI itself)
-  gcloud iam service-accounts add-iam-policy-binding $SA_NAME_PRIV@$GCP_PROJECT_ID.iam.gserviceaccount.com \
+  gcloud iam service-accounts add-iam-policy-binding $gsa_email_priv \
     --role roles/iam.workloadIdentityUser \
     --member "serviceAccount:$GCP_PROJECT_ID.svc.id.goog[$NAMESPACE/$SA_NAME_PRIV]"
 
-  gcloud iam service-accounts add-iam-policy-binding $SA_NAME_LIMITED@$GCP_PROJECT_ID.iam.gserviceaccount.com \
+  gcloud iam service-accounts add-iam-policy-binding $gsa_email_limited \
     --role roles/iam.workloadIdentityUser \
     --member "serviceAccount:$GCP_PROJECT_ID.svc.id.goog[$NAMESPACE/$SA_NAME_LIMITED]"
 
   # Link KSA to GSA
-  kubectl annotate serviceaccount $SA_NAME_PRIV \
-    --namespace $NAMESPACE \
-    iam.gke.io/gcp-service-account=$SA_NAME_PRIV@$GCP_PROJECT_ID.iam.gserviceaccount.com
+  kubectl annotate serviceaccount $SA_NAME_PRIV --namespace $NAMESPACE \
+    iam.gke.io/gcp-service-account=$gsa_email_priv
 
-  kubectl annotate serviceaccount $SA_NAME_LIMITED \
-    --namespace $NAMESPACE \
-    iam.gke.io/gcp-service-account=$SA_NAME_LIMITED@$GCP_PROJECT_ID.iam.gserviceaccount.com
-
-  kubectl apply -f $SCRIPT_DIR/../wli-k8s2gsa-manifests.yaml
+  kubectl annotate serviceaccount $SA_NAME_LIMITED --namespace $NAMESPACE \
+    iam.gke.io/gcp-service-account=$gsa_email_limited
 }
 
 enable_apis() {
@@ -204,14 +204,15 @@ cleanup() {
 
   set +eou
 
-  echo Deleting resources and disabling the APIs
-  gcloud certificate-manager certificates delete $cert_name --location=$GCP_REGION -q
+  echo Deleting resources
   gcloud network-services gateways delete swp --location=$GCP_REGION -q
   gcloud network-security gateway-security-policies delete $policy_name --location=$GCP_REGION -q
   gcloud iam service-accounts delete $gsa_email_priv --project=$GCP_PROJECT -q
   gcloud iam service-accounts delete $gsa_email_limited --project=$GCP_PROJECT -q
+  gcloud certificate-manager certificates delete $cert_name --location=$GCP_REGION -q
 
   sleep 250
+  echo Disabling APIs
   gcloud services disable --force networksecurity.googleapis.com
   gcloud services disable --force networkservices.googleapis.com
   gcloud services disable --force certificatemanager.googleapis.com
