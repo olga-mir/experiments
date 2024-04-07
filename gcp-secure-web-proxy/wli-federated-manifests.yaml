@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+spec:
+  finalizers:
+  - kubernetes
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-app-priv-sa
+  namespace: platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-app-limited-sa
+  namespace: platform
