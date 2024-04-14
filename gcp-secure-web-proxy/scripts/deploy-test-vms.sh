@@ -10,9 +10,9 @@ subnet_name=$CLUSTER_SUBNET
 subnet_primary_range="10.0.0.0/22"
 
 # SA - create only once
-gcloud iam service-accounts create $GSA_NAME \
-    --description="Test SWP from VM" \
-    --display-name="test-vm-swp"
+# gcloud iam service-accounts create $GSA_NAME \
+#     --description="Test SWP from VM" \
+#     --display-name="test-vm-swp"
 
 gcloud compute instances create ${VM_NAME}-with-sa \
     --provisioning-model=SPOT \
@@ -36,7 +36,7 @@ gcloud compute instances create envoy-proxy \
     --scopes=https://www.googleapis.com/auth/cloud-platform \
     --machine-type=e2-small \
     --zone=$ZONE \
-    --tag=proxy-vm-tag \
+    --tags=proxy-vm-tag \
     --subnet=$subnet_name \
     --network=$vpc_name
 
@@ -45,7 +45,7 @@ gcloud compute firewall-rules create allow-proxy-communication \
     --priority=1000 \
     --network=$vpc_name \
     --action=ALLOW \
-    --rules=tcp:8888 \
+    --rules=tcp:8888,tcp:8080 \
     --source-ranges=$subnet_primary_range \
     --target-tags=proxy-vm-tag
 

@@ -11,33 +11,52 @@ Test integration between GKE and SWP.
 As of now GKE WLI is not supported in SWP and there is no public information when it might be, latest confirmation from Google staff in googlecommunity dated Feb 2024. [Post](https://www.googlecloudcommunity.com/gc/General-Misc-Q-A/How-do-Secure-Web-Proxy-rules-filter-requests-sent-by-containers/m-p/615769#M1189)
 
 
-## Deploy SWP
+## Deployment
 
-Deployment script [./scripts/deploy.sh](./scripts/deploy.sh)
+Deployment scripts located in [./scripts](./scripts) directory.
 
+Deploy and configure Secure Web Proxy, enable required APIs if not enabled:
 ```
 % ./scripts/deploy.sh all
 ```
 
-## VM Test
+Deploy (Spot) VMs, including [mitmproxy](https://github.com/mitmproxy/mitmproxy) for deepdive:
+```
+% ./scripts/deploy-test-vms.sh
+```
 
-See in [test-swp-with-vm-sa.md](./test-swp-with-vm-sa.md)
+Cleanup, including disabling APIs to avoid accidental charges:
+```
+% ./scripts/deploy.sh cleanup
+```
 
-## GKE
+GKE cluster. Any GKE cluster with WLI will do, I'm using a cluster from other project: https://github.com/olga-mir/k8s/blob/main/gcp/gcloud/dpv2-create-gke-with-o11y.sh
 
-Deploy a GKE cluster. Any GKE cluster with WLI will do, I'm using a cluster from other project: https://github.com/olga-mir/k8s/blob/main/gcp/gcloud/dpv2-create-gke-with-o11y.sh
 
-Test pods are found in this folder starting with `pod-*` and there are 4 flavours:
+## Useful Commands And Understanding Logs
 
-* limited / priv - this is distingushes between priorities granted to the pod's SA. limited pod has no roles associated with its account and is used to prove that it can't access something while the `priv` one can (priv is short for privileged, I admit the terminology is confusing)
-* ksa2gsa / federated - There are two ways to configure WLI in GKE. Explicit GCP SA (GSA) with explicit linking of KSA to GSA via annotation on KSA resource is the original WLI approach, but in a newer Federated way there is no need to create a GSA and link it, instead a principal with a URI which encodes information about KSA can be used in GCP IAM policies. For more info https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity
+Test that this process is linked correctly to the intended credentials. Two commands achieve the same but via different tools.
+```
+% curl -X GET -H "Authorization: Bearer $(gcloud auth print-access-token)" https://storage.googleapis.com/storage/v1/b/<BUCKET>/o
+% gcloud storage ls gs://<BUCKET> --verbosity=debug
+```
 
-Test pods are configured with proxy env and contain gcloud, [example pod](./pod-limited-sa.yaml)
+Check what Service Account is associated to the caller process:
+```
+% curl -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+```
 
-<details>
-  <summary>yaml snippet</summary>
+Get token info:
+```
+% TOKEN=$(gcloud auth print-access-token)
+% curl "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=$TOKEN"
+```
 
+Send HTTP requests via proxy.
+
+In a pod this can be configured directly in the manifest:
 ```yaml
+  containers:
   - name: test
     image: google/cloud-sdk:slim
     env:
@@ -47,16 +66,24 @@ Test pods are configured with proxy env and contain gcloud, [example pod](./pod-
         value: "http://10.0.0.9:443"
       - name: NO_PROXY
         value: "localhost,127.0.0.1,metadata.google.internal,.googleapis.com,accounts.google.com"
-    command: ["/bin/sh"]
-    args:
-      - -c
-      - |
-        set -x
-        (curl -fvs https://wikipedia.org || true) &&
-        (curl -fsv https://api.ipify.org || true) &&
-        sleep infinity
 ```
-</details>
+
+In curl use `-x` flag to specify proxy:
+```
+```
+
+
+
+## VM Test
+
+See in [test-swp-with-vm-sa.md](./test-swp-with-vm-sa.md)
+
+## GKE
+
+Required k8s manifests can be found in [./k8s-manifests](./k8s-manifests)
+
+* limited / admin - Limited means there is either no corresponding GSA or it is not granted any priviledges and does not have any rules configured in SWP.
+* ksa2gsa / federated - WLI in GKE can be achieved in one of two ways - Federated or explicit GSA and linking of KSA to that GSA via annotation on KSA resource. The former is a more lightweight and conveninent way, but not every GCP service supports it, it also lacks VPCSC support and is not supported in SWP either. For more info https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity. Therefore in this exercise we'll explore only non-federated aproach with explicit GSA, all related resources will be named 'ksa2gsa' to indicate this type of WLI.
 
 
 ### No Auth
