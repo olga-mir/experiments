@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-without-proxy
+spec:
+  containers:
+  - name: curl-container
+    image: curlimages/curl
+    command: ["/bin/sh"]
+    args: ["-c","curl -fvs http://httpbin.org/get -o /dev/null", "curl -v http://httpbin.org/ip", "curl -v https://api.ipify.org", sleep infinity]
+

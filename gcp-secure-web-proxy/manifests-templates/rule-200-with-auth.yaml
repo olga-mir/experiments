@@ -1,0 +1,7 @@
+name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/$policy_name/rules/allow-httpbin-org-with-auth
+description: Allow httpbin for specific service account
+enabled: true
+priority: 200
+basicProfile: ALLOW
+sessionMatcher: host() == 'httpbin.org' && source.matchServiceAccount('$sa')
+

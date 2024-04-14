@@ -1,0 +1,6 @@
+name: projects/$GCP_PROJECT_ID/locations/$GCP_REGION/gatewaySecurityPolicies/$policy_name/rules/allow-httpbin-org-no-auth
+description: Allow httpbin
+enabled: true
+priority: 300
+basicProfile: ALLOW
+sessionMatcher: host() == 'httpbin.org'

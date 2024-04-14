@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-admin-sa
+  namespace: platform
+spec:
+  serviceAccountName: demo-app-admin-sa
+  automountServiceAccountToken: true
+  containers:
+  - name: test
+    image: google/cloud-sdk:slim
+    env:
+      - name: HTTP_PROXY
+        value: "http://10.0.0.9:443"
+      - name: HTTPS_PROXY
+        value: "http://10.0.0.9:443"
+      - name: NO_PROXY
+        value: "localhost,127.0.0.1,metadata.google.internal,.googleapis.com,accounts.google.com"
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - |
+        set -x
+        (curl -fvs http://httpbin.org/get || true) &&
+        (curl -fsv https://api.ipify.org || true) &&
+        sleep infinity
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+        ephemeral-storage: 10Mi

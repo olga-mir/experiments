@@ -1,0 +1,22 @@
+# for quick and dirty poc, these KSAs are not annotated to avoid templating and substitution.
+# instead it will be done via script where required information is avaliable via env vars
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+spec:
+  finalizers:
+  - kubernetes
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-app-admin-sa-ksa2gsa
+  namespace: platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-app-limited-sa-ksa2gsa
+  namespace: platform

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-with-proxy
+spec:
+  containers:
+  - name: curl-container
+    image: curlimages/curl
+    env:
+      - name: HTTP_PROXY
+        value: "http://10.0.0.9:443"
+      - name: HTTPS_PROXY
+        value: "http://10.0.0.9:443"
+      - name: NO_PROXY
+        value: "localhost,127.0.0.1"
+    command: ["/bin/sh"]
+    args: ["-c", "(curl -fvs https://http://httpbin.org/get || true) && (curl -fsv https://api.ipify.org || true) && sleep infinity"]
