@@ -20,7 +20,9 @@ Below logs from `mitmproxy` show dumps of 2 requests - from a VM and from a GKE 
 
 <details>
   <summary>Logs from mitmproxy</summary>
-```
+
+```bash
+
 user@mitmproxy:~$ ./mitmdump -s headers-masked.py
 [05:37:07.080] Loading script headers-masked.py
 [05:37:07.082] HTTP(S) proxy listening at *:8080.
@@ -48,7 +50,9 @@ accept: */*
 authorization: Bearer ya29....Y9f90
 10.0.0.47:40032: GET https://storage.googleapis.com/storage/v1/b/BUCKET/o HTTP/2.0
      << HTTP/2.0 401 Unauthorized 285b
+
 ```
+
 </details>
 
 ## Exploring Tokens
