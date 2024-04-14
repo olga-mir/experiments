@@ -70,6 +70,7 @@ In a pod this can be configured directly in the manifest:
 
 In curl use `-x` flag to specify proxy:
 ```
+curl -v -k -x <YOUR_PROXY> -H "Authorization: Bearer $(gcloud auth print-access-token)" https://storage.googleapis.com/storage/v1/b/$BUCKET/o
 ```
 
 
