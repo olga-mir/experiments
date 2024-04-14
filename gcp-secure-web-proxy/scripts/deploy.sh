@@ -1,15 +1,10 @@
 #!/bin/bash
 
-<<<<<<< HEAD
 set -eou pipefail
-=======
-set -eoux pipefail
->>>>>>> 2392b7b (rename swp folder)
 
 # https://cloud.google.com/secure-web-proxy/docs/overview
 # https://cloud.google.com/secure-web-proxy/docs/initial-setup-steps
 
-<<<<<<< HEAD
 vpc_name=$CLUSTER_VPC # sourced in env vars
 subnet_name=$CLUSTER_SUBNET
 
@@ -32,28 +27,12 @@ RENDERED="$SCRIPT_DIR/../manifests-rendered"
 
 sa=$gsa_email_admin
 export vpc_name subnet_name sa policy_name
-=======
-# resource name should start with a letter and can only have lowercase letters, numbers, hyphens and at most 63 characters
-experiment_name="basic"
-
-vpc_name=$CLUSTER_VPC # sourced in env vars
-subnet_name=$CLUSTER_SUBNET
-
-proxy_subnet_name="${vpc_name}-proxy-only-subnet"
-proxy_range="172.16.0.0/26"
-
-TEMPLATES="../manifests-templates"
-RENDERED="../manifests-rendered"
-
-export experiment_name vpc_name subnet_name
->>>>>>> 2392b7b (rename swp folder)
 
 for template in "$TEMPLATES"/*; do
   filename=$(basename "$template")
   envsubst < "$template" > "$RENDERED/$filename"
 done
 
-<<<<<<< HEAD
 set -x
 
 main() {
@@ -94,8 +73,8 @@ case "$1" in
       install_rules
       install_proxy
         ;;
-    cleanup)
-      cleanup
+    cleanup_swp)
+      cleanup_swp
         ;;
     -h|--help)
         show_help
@@ -114,7 +93,7 @@ show_help() {
     echo "Most common options:"
     echo "  enable_apis"
     echo "  all"
-    echo "  cleanup"
+    echo "  cleanup_swp"
     echo "Or any other function defined in this file"
 }
 
@@ -222,7 +201,7 @@ enable_apis() {
   gcloud services enable networkservices.googleapis.com
 }
 
-cleanup() {
+cleanup_swp() {
   rm $RENDERED/*
 
   set +eou
@@ -249,59 +228,3 @@ main "$@"
 # gcloud compute networks create $vpc_name --subnet-mode=custom
 # gcloud compute networks subnets create $subnet_name --range=$primary_range --network=$vpc_name --region=$GCP_REGION
 # gcloud compute networks subnets create $proxy_subnet_name --purpose=REGIONAL_MANAGED_PROXY --role=ACTIVE --region=$GCP_REGION --network=$vpc_name --range=$proxy_range
-
-=======
-policy_name=${experiment_name}-policy
-
-policy_yaml=$RENDERED/${experiment_name}-policy.yaml
-rule_yaml=$RENDERED/${experiment_name}-rule.yaml
-gateway_yaml=$RENDERED/${experiment_name}-gateway.yaml
-
-
-# ---------------- VPC and Subnets
-
-# gcloud compute networks create $vpc_name --subnet-mode=custom
-# gcloud compute networks subnets create $subnet_name --range=$primary_range --network=$vpc_name --region=$GCP_REGION
-
-# gcloud compute networks subnets create $proxy_subnet_name --purpose=REGIONAL_MANAGED_PROXY --role=ACTIVE --region=$GCP_REGION --network=$vpc_name --range=$proxy_range
-
-
-# ---------------- Certificates
-
-key_path="$HOME/.swp/key.pem"
-cert_path="$HOME/.swp/cert.pem"
-cert_name="${experiment_name}-cert"
-SWP_HOST_NAME="myswp.example.com"
-
-# openssl req -x509 -newkey rsa:2048 \
-#   -keyout $key_path \
-#   -out $cert_path -days 14 \
-#   -subj "/CN=$SWP_HOST_NAME" -nodes -addext \
-#   "subjectAltName=DNS:$SWP_HOST_NAME"
-#
-# gcloud certificate-manager certificates create $cert_name \
-#    --certificate-file=$cert_path \
-#    --private-key-file=$key_path \
-#    --location=$GCP_REGION
-
-gcloud certificate-manager certificates create $cert_name --location=$GCP_REGION --private-key-file=$key_path --certificate-file=$cert_path
-
-
-# ---------------- Gateway security policy
-
-gcloud network-security gateway-security-policies import $policy_name \
-    --source=$policy_yaml \
-    --location=$GCP_REGION
-
-gcloud network-security gateway-security-policies rules import allow-wikipedia-org \
-    --source=$rule_yaml \
-    --location=$GCP_REGION \
-    --gateway-security-policy=$policy_name
-
-
-# ---------------- THE PROXY ITSELF :party: --------------
-
-gcloud network-services gateways import test-swp \
-    --source=$gateway_yaml \
-    --location=$GCP_REGION
->>>>>>> 2392b7b (rename swp folder)
