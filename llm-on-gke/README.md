@@ -42,3 +42,4 @@ Total: Around $0.769 per hour
 
 * https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/ai-ml
 
+* https://cloud.google.com/kubernetes-engine/docs/how-to/gpus
