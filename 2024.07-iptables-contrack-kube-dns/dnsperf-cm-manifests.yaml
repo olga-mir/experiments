@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dnsperf-config
+data:
+  queries.txt: |
+    google.com A
+    openai.com A
+    metrics-server.kube-system.svc.cluster.local A
+    status.cloud.google.com A
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dnsperf
+spec:
+  template:
+    metadata:
+      labels:
+        app: dnsperf
+    spec:
+      containers:
+      - name: dnsperf
+        image: hectorm/dnsperf:latest
+        args:
+          - "-s"
+          - "kube-dns.kube-system.svc.cluster.local"
+          - "-d"
+          - "/root/queries.txt"
+          - "-Q"
+          - "100"  # Number of queries per second
+        volumeMounts:
+        - name: dnsperf-config
+          mountPath: /root/queries.txt
+          subPath: queries.txt
+      volumes:
+      - name: dnsperf-config
+        configMap:
+          name: dnsperf-config
+      restartPolicy: Never
