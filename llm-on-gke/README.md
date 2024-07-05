@@ -24,6 +24,16 @@ Ephemeral Storage: Approximately $0.009
 GKE Management Fee: $0.10
 Total: Around $0.769 per hour
 
+# Explore
+
+vllm image size on disk
+```
+  images:
+  - names:
+    - us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve@sha256:14bc6c5d4faecba1ce15bd2dba6622334fe24d8875913fe108f5d8f277f09872
+    - us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20240220_0936_RC01
+    sizeBytes: 11869885985
+```
 
 
 # References
