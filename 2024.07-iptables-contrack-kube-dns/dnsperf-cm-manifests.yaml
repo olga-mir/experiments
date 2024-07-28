@@ -1,0 +1,81 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-records-config
+  namespace: default
+data:
+  records.txt: |-
+    www.google.com A
+    www.amazon.com A
+    kubernetes.default.svc.cluster.local A
+    kube-dns.kube-system.svc.cluster.local A
+    testdomain.local A
+    mywebsite.internal A
+    service.local A
+    app.internal A
+    example.local A
+    example.com A
+    google.com A
+    amazon.com A
+    microsoft.com A
+    openai.com A
+    wikipedia.org A
+    github.com A
+    cnn.com A
+    nytimes.com A
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: dnsperf
+  name: dnsperf
+  namespace: default
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dnsperf
+  template:
+    metadata:
+      labels:
+        app: dnsperf
+    spec:
+      containers:
+      - env:
+        # please replace the DNS_SERVER_ADDR/DNS_SERVER_PORT according to the command output
+        # - kubectl get -n kube-system svc kube-dns -o go-template='{{.spec.clusterIP}}{{"\n"}}'
+        - name: ADDRESS_FAMILY
+          value: "any"
+        - name: TRANSPORT_MODE
+          value: "udp"
+        - name: DNS_SERVER_ADDR
+          value: "10.87.16.10"
+        - name: DNS_SERVER_PORT
+          value: "53"
+        - name: MAX_CLIENTS
+          value: "50"
+        - name: MAX_THREADS
+          value: "50"
+        - name: MAX_TEST_SECONDS
+          value: "300"
+        - name: TIMEOUT_FOR_QUERY
+          value: "5"
+        - name: MAX_QPS
+          value: "100000"
+        image: guessi/dnsperf
+        imagePullPolicy: Always
+        name: dnsperf
+        volumeMounts:
+        - mountPath: /opt/
+          name: dns-records-volume
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: dns-records-config
+        name: dns-records-volume
