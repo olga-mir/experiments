@@ -1,0 +1,15 @@
+apiVersion: k8s.playground.k8s.playground/v1alpha1
+kind: DemoOne
+metadata:
+  labels:
+    app.kubernetes.io/name: kcd-demo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: {{.Name}}
+  namespace: test
+spec:
+  configMaps:
+    count: {{.CmCount}}
+    payloadSize: 256Ki
+  secrets:
+    count: 10
+    keys: 5

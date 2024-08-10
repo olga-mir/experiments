@@ -1,0 +1,19 @@
+name: test
+
+#namespace:
+#  number: 1
+
+tuningSets:
+- name: Uniform1qps
+  qpsLoad:
+    qps: 1
+
+steps:
+- name: Create CR
+  phases:
+  - tuningSet: Uniform1qps
+    objectBundle:
+    - basename: test-cr
+      objectTemplatePath: "cr.yaml"
+      templateFillMap:
+        CmCount: 25
