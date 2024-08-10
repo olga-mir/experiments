@@ -14,10 +14,13 @@ tuningSets:
 #  qpsLoad:
 #    qps: 1
 
+steps:
 - name: Create CRs
   phases:
-  - tuningSet: Parallel50
-    replicas: 10
+  - tuningSet: Parallel5
+    replicaspernamespace: 10
+    namespacelist:
+    - test
     objectBundle:
     - basename: test-cr
       objectTemplatePath: "cr.yaml"
