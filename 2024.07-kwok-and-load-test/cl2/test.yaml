@@ -3,12 +3,11 @@ name: test
 #namespace:
 #  number: 1
 
-
 tuningSets:
 - name: Parallel5
   qpsLoad:
     qps: 5
-  parallelism: 2
+  parallelism: 5
 
 #- name: Uniform1qps
 #  qpsLoad:
@@ -16,9 +15,24 @@ tuningSets:
 
 steps:
 - name: Create CRs
+
+  # https://github.com/kubernetes/perf-tests/tree/master/clusterloader2#Measurement
+  measurements:
+  #- identifier: APIResponsiveness
+  #  method: APIResponsiveness
+
+  - method: WaitForGenericK8sObjects
+    identifier: WaitForGenericK8sObjects
+      params:
+        namespace: test
+        kind: ConfigMap
+        labelSelector: "app=test"
+        desiredCount: 25
+        waitTimeout: 300s
+
   phases:
   - tuningSet: Parallel5
-    replicaspernamespace: 10
+    replicasPerNamespace: 10
     namespacelist:
     - test
     objectBundle:
@@ -26,3 +40,19 @@ steps:
       objectTemplatePath: "cr.yaml"
       templateFillMap:
         CmCount: 25
+
+- name: Measure API Responsiveness
+  phases:
+  - measurements:
+    - method: APIResponsiveness
+      params:
+        action: gather
+        resource: ""  # Optional: specify specific resources (e.g., pods, services), empty for all
+
+- name: Resource Usage Summary
+  phases:
+  - measurements:
+    - method: ResourceUsageSummary
+      params:
+        resource: pods
+        waitFor: 60s
