@@ -1,0 +1,50 @@
+version: '3'
+
+tasks:
+  build:
+    desc: "Build the Docker image for eBPF"
+    cmds:
+      - echo "Building Docker image..."
+      - docker build -t ebpf-cloud-run:latest .
+
+  run-local:
+    desc: "Run the image locally in privileged mode to test eBPF"
+    cmds:
+      - echo "Running Docker image locally..."
+      - docker run --privileged -it ebpf-cloud-run:latest
+
+  push:
+    desc: "Push the image to Google Container Registry (GCR)"
+    vars:
+      registry: "gcr.io"
+      project_id: "{{.PROJECT_ID}}"
+    cmds:
+      - echo "Tagging the image for GCR..."
+      - docker tag ebpf-cloud-run {{.registry}}/{{.project_id}}/ebpf-cloud-run
+      - echo "Pushing the image to GCR..."
+      - docker push {{.registry}}/{{.project_id}}/ebpf-cloud-run
+    env:
+      PROJECT_ID:
+        sh: echo "$PROJECT_ID"
+
+  deploy:
+    desc: "Deploy the eBPF Docker image to Cloud Run"
+    cmds:
+      - echo "Deploying the image to Cloud Run..."
+      - gcloud run deploy ebpf-demo \
+          --image gcr.io/{{.PROJECT_ID}}/ebpf-cloud-run \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated
+    env:
+      PROJECT_ID:
+        sh: echo "$PROJECT_ID"
+
+  all:
+    desc: "Run all tasks: build, test locally, push, and deploy"
+    cmds:
+      - task: build
+      - task: run-local
+      - task: push
+      - task: deploy
+
