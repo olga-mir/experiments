@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head><title>Φορτίο v1.68.0</title>
+  <script src="1.68.0/static/js/Chart.min.js"></script>
+  <script src="1.68.0/static/js/fortio_chart.js"></script>
+  <link rel="icon" href="1.68.0/static/img/favicon.ico"/>
+  <link rel="stylesheet" href="1.68.0/static/css/fortio.css">
+</head>
+<body>
+<a href="https://fortio.org/" target="_blank"><img src="1.68.0/static/img/fortio-logo-gradient-no-bg.svg" alt="Fortio Logo" height="110" align="right" /></a>
+
+<h1>Φορτίο (fortio) v1.68.0 control UI</h1>
+<p>Up for 20.2s (since Tue Nov 26 21:21:44 2024).
+
+
+<form id="run-form" method="GET" onsubmit="checkPayload()">
+  <div>
+    Title/Labels: <input type="text" name="labels" size="40" value="Fortio" /> (empty to skip title)<br />
+    URL: <input type="text" name="url" size="80" value="http://localhost:8080/echo?delay=250us:30,5ms:5&status=503:0.5,429:1.5" /> <br />
+    QPS: <input type="text" name="qps" size="6" value="100" />
+    Duration: <input id="duration" type="text" name="t" size="6" value="3s" />
+    or run until interrupted:<input type="checkbox" name="t" onchange="toggleDuration(this)" />
+    or run for exactly <input type="text" name="n" size="6" value="" /> calls. <br />
+    Threads/Simultaneous connections: <input type="text" name="c" size="6" value="10" /> &nbsp;&nbsp;
+    Log errors <input type="checkbox" name="log-errors" checked> <br />
+    Connection reuse range: Min <input type="text" name="connection-reuse-range-min" size="6" value="" />
+    Max <input type="text" name="connection-reuse-range-max" size="6" value="" />
+    or Single value: <input type="text" name="connection-reuse-range-value" size="6" value="" /> <br />
+    Uniform:<input type="checkbox" name="uniform" checked /> or Jitter:<input type="checkbox" name="jitter" /> &nbsp;&nbsp;
+    No Catch-Up (qps is a ceiling): <input type="checkbox" name="nocatchup" checked /><br />
+    Percentiles: <input type="text" name="p" size="20" value="50, 75, 90, 99, 99.9" /> <br />
+    Histogram Resolution: <input type="text" name="r" size="8" value="0.0001" /> <br />
+    Method override (empty for GET/POST based on payload): <input type="text" name="X" size="8" value="" /> <br />
+    Extra Headers:<br />
+    <input type="text" name="H" size=40 value="" /> <br />
+    <button type="button" onclick="addCustomHeader()">+</button>
+    <br />
+    Payload:<br /><textarea name="payload" rows="5" cols="75" id="payload"></textarea><br />
+    Load using:<br />
+    tcp/udp/http: <input type="radio" name="runner" value="http/tcp/udp" checked/>
+    (https insecure:<input type="checkbox" name="https-insecure" />,
+    standard go client instead of fastclient:<input type="checkbox" name="stdclient" checked/>,
+    h2: <input type="checkbox" name="h2"/>,
+    sequential warmup: <input type="checkbox" name="sequential-warmup"/>,
+    resolve: <input type="text" name="resolve" size="12" value="" />)
+    <br />&nbsp;&nbsp;or<br />
+    grpc: <input type="radio" name="runner" value="grpc"/>
+    (grpc secure transport (tls):<input type="checkbox" name="grpc-secure" />,
+    using ping backend:<input type="checkbox" name="ping" />,
+    ping delay: <input type="text" name="grpc-ping-delay" size="6" value="0" />,
+    health service: <input type="text" name="healthservice" size="6" value="" />) <br />
+    JSON output:<input type="checkbox" name="json" />,
+    Save output:<input type="checkbox" name="save" checked />) <br />
+    Timeout: <input type="text" name="timeout" size="12" value="750ms" /> <br />
+    <input type="submit" name="load" value="Start"/>
+  </div>
+</form>
+<p><i>Or</i></p>
+<div>
+  Browse <a href='browse'>saved results</a> (or <a href="data/">raw JSON</a>)
+</div>
+<p><i>Or</i></p>
+<form action="rest/dns">
+  <div>
+    DNS resolve <input type="text" id="name" name="name" value="" size=50/>
+  </div>
+</form>
+<p><i>Or</i></p>
+<form action="fetch2/">
+<div>
+    Debug fetch any single URL: <input type="text" id="url" name="url" value="" size=50/>
+  </div>
+</form>
+<p><i>Or</i></p>
+<form action="javascript:document.location += 'fetch/' + document.getElementById('uri').value">
+  <div>
+    HTTP/1.1 only semi proxy
+    Debug fetch http://<input type="text" id="uri" name="uri" value="" size=50/>
+  </div>
+</form>
+<p><i>Or</i></p>
+Other endpoints: <a href="/debug">Debug</a> and <a href="/debug?env=dump">debug with env dump</a>
+and <a href="/debug/pprof/">Internal PPROF</a>
+and <a href="flags">Command line flags</a>
+and <a href="/debug/echo/">Additional echo handler under /debug/echo/</a> (supports all the
+query arguments mentioned on the <a href="https://github.com/fortio/fortio#server-urls-and-features">Echo url features</a> github doc)
+<p><i>Or</i></p>
+<a href="/debug/metrics">Metrics</a>
+<p><i>Or</i></p>
+<form action="sync">
+  <div>
+    Sync/download tsv or xml s3 bucket data from:<br />
+    <input type="text" name="url" value="" size=50/>
+  </div>
+</form>
+<p><i>Or</i></p>
+<form method="POST">
+  <div>
+    Interrupt runs from this server: <input type="submit" name="stop" value="Stop" />
+  </div>
+</form>
+
+<p></p>
+<hr />
+Fortio 1.68.0 h1:2M9RuitiN&#43;MgW6QlTJCHjW6PJLAPj/YCXegxSCLQ3rw= go1.23.3 amd64 linux
+</body>
+</html>
+
