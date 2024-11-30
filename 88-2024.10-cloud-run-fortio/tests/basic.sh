@@ -4,6 +4,7 @@ set -eou pipefail
 # {"level":"info", "msg":"REST API on /fortio/rest/run, /fortio/rest/status, /fortio/rest/stop, /fortio/rest/dns", "r":1, "ts":1.732740761065668E9}
 # {"level":"info", "msg":"Debug endpoint on /debug, Additional Echo on /debug/echo/, Flags on /fortio/flags, and Metrics on /debug/metrics", "r":1, "ts":1.732740761066139E9}
 
+export SERVICE_URL=$(gcloud run services describe fortio-test --region=$REGION --format='value(status.url)')
 export TOKEN=$(gcloud auth print-identity-token)
 
 OUTPUT_DIR="test-results"
@@ -19,7 +20,7 @@ curl -s -H "Authorization: Bearer $TOKEN" $SERVICE_URL/fortio/rest/dns?host=goog
 
 exit 0
 
-# Start a load test (POST request)
+# Load test
 curl -s -X POST -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{
@@ -31,7 +32,6 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
     }' \
     $SERVICE_URL/fortio/rest/run > $OUTPUT_DIR/out-run.json
 
-# Wait a bit for the test to complete
 sleep 6
 
 # Get the results
