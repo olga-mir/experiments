@@ -44,6 +44,7 @@ type SystemDetails struct {
 	Architecture string `json:"architecture"`
 	NumCPU       int    `json:"num_cpu"`
 	UnameInfo    string `json:"uname"`
+	GOMAXPROCS   int    `json:"gomaxprocs"`
 }
 
 type FileContents struct {
@@ -149,6 +150,7 @@ func getSystemDetails() SystemDetails {
 		Architecture: runtime.GOARCH,
 		NumCPU:       runtime.NumCPU(),
 		UnameInfo:    unameString,
+		GOMAXPROCS:   runtime.GOMAXPROCS(0),
 	}
 }
 

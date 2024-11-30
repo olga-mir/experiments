@@ -33,21 +33,22 @@ A diagnostic service that provides detailed information about the Cloud Run envi
 - `/docs` - Project documentation
 
 ```
-.
-├── Taskfile.yml
-├── scripts/
-│   ├── deploy-bastion.sh
-│   └── deploy.sh
-├── src/
-│   ├── cmd/
-│   │   └── info/          # cloudrun-info service
-│   │       ├── Dockerfile
-│   │       └── main.go
-│   └── pkg/
-├── tests/
-│   └── basic.sh
-└── docs/  # docs and some output snippets that provide insights into Cloud Run environment
-    └── ...
+
+├── Taskfile.yaml
+├── scripts
+│   ├── deploy-bastion.sh
+│   └── deploy.sh
+├── src
+│   ├── Dockerfile
+│   ├── go.mod
+│   ├── main.go
+│   └── pkg
+│       └── info
+│           └── info.go
+├─── docs/  # docs and some output snippets that provide insights into Cloud Run environment
+│    └── ...
+└── tests
+    └── basic.sh
 ```
 
 ## License

@@ -1,0 +1,62 @@
+{
+  "hostname": "localhost",
+  "environment": {
+    "CLOUD_RUN_TIMEOUT_SECONDS": "300",
+    "HOME": "/root",
+    "K_CONFIGURATION": "cloudrun-info",
+    "K_REVISION": "cloudrun-info-00001-l4g",
+    "K_SERVICE": "cloudrun-info",
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PORT": "8080",
+    "PWD": "/"
+  },
+  "network": {
+    "interfaces": [
+      {
+        "name": "lo",
+        "addresses": [
+          "127.0.0.1/8",
+          "::1/128"
+        ],
+        "mac_address": ""
+      },
+      {
+        "name": "eth1",
+        "addresses": [
+          "fddf:3978:feb1:d745::c001/128",
+          "169.254.8.1/32"
+        ],
+        "mac_address": ""
+      },
+      {
+        "name": "eth2",
+        "addresses": [
+          "169.254.169.1/32"
+        ],
+        "mac_address": "42:00:4e:49:43:00"
+      }
+    ],
+    "gateway": "default dev eth1 proto unspec scope link \ndefault dev eth1 proto unspec scope link",
+    "nameservers": [
+      "169.254.169.254"
+    ],
+    "routes": [
+      "::1 dev lo proto unspec scope link ",
+      "169.254.169.0/25 dev eth2 proto unspec scope link ",
+      "127.0.0.0/8 dev lo proto unspec scope link ",
+      "default dev eth1 proto unspec scope link ",
+      "default dev eth1 proto unspec scope link ",
+      ""
+    ]
+  },
+  "system": {
+    "os": "linux",
+    "architecture": "amd64",
+    "num_cpu": 2,
+    "uname": "Linux localhost 4.4.0 #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 Linux"
+  },
+  "files": {
+    "etc_hosts": "127.0.0.1 localhost\n169.254.169.254 metadata.google.internal metadata\n169.254.169.253 appengine.googleapis.internal appengine\n",
+    "resolv_conf": "nameserver 169.254.169.254\nsearch google.internal.\n"
+  }
+}
