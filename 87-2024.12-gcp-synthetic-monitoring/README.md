@@ -1,8 +1,12 @@
 # Purpose
 
-Exploring GCP Synthetic Monitoring and fortio capabilities
+Exploring GCP Synthetic Monitoring and fortio capabilities.
 
-# Pre-requisites
+First basic POC described below monitors outbound connectivity from a Kubernetes cluster by deploying a fortio image and configuring [Uptime Check URL](https://cloud.google.com/monitoring/uptime-checks) with URL params that will instruct fortio to call out to external service and return success or failure result to the monitor based on the outcome.
+
+Note, that there are other monitoring types that potentially could be more tailored to a particular use-case such as [Kubernetes service](https://cloud.google.com/monitoring/api/resources#tag_k8s_service) check. (This page has a lot more different types of monitoring supported by GCM, they are not necessarily supported by Synthetic Monitoring feature, but they could be in the future)
+
+# Prerequisites
 
 1. Access to a GKE cluster to deploy fortio service with ingress.
 2. Access to a GCP project with sufficient permissions to configure synthetic monitoring.
@@ -15,9 +19,8 @@ graph LR
     ING -->|Route| ILB[Internal Load Balancer]
     subgraph GKE Cluster
         ILB -->|Forward| SVC[Fortio Service]
-        SVC -->|Route| POD[Fortio Pod]
     end
-    POD -->|Test Request| INT[Internet Endpoints]
+    SVC -->|Test Request| EXT[External Endpoint]
     
     %% Add monitoring flow
     POD -->|Metrics| CM[Cloud Monitoring]
@@ -45,7 +48,9 @@ Deploy uptime checks:
 ```bash
 ./scripts/deploy-monitoring.sh
 ```
-## Uptime checks
+## Uptime Checks
+
+https://cloud.google.com/monitoring/uptime-checks
 
 list uptime checks
 
@@ -53,7 +58,8 @@ list uptime checks
 gcloud beta monitoring uptime list-configs
 ```
 
-Output:
+<details>
+  <summary>See full 'describe' output of Uptime Checks for this experiment</summary>
 
 ```yaml
 ---
@@ -67,7 +73,7 @@ httpCheck:
   requestMethod: GET
 monitoredResource:
   labels:
-    host: <FORTIO_SVC_IP>
+    host: <FORTIO_SVC>
     project_id: <REDACTED_PROJECT_ID>
   type: uptime_url
 name: projects/<REDACTED_PROJECT_ID>/uptimeCheckConfigs/gke-test-connectivity--4b15lDJ-Tc
@@ -84,7 +90,7 @@ httpCheck:
   requestMethod: GET
 monitoredResource:
   labels:
-    host: <FORTIO_SVC_IP>
+    host: <FORTIO_SVC>
     project_id: <REDACTED_PROJECT_ID>
   type: uptime_url
 name: projects/<REDACTED_PROJECT_ID>/uptimeCheckConfigs/gke-test-connectivity-fail-example-7729izqEK8s
@@ -92,9 +98,13 @@ period: 60s
 timeout: 60s
 ```
 
+</details>
+
+
+
 # Results
 
-## Initial setup and behaviour
+## Basic Test Setup
 
 Fortio provides several useful utilities, including the ability to make HTTP requests to specified URLs and return the results to the caller.
 In this demo, we created two uptime checks:
@@ -105,6 +115,7 @@ In this demo, we created two uptime checks:
 When the Fortio service is running with internet access, the first check consistently succeeds while the second check fails with a 400 response code.
 
 Valid URL fetch example:
+
 ```terminal
 % time curl -s -w "%{http_code}" "http://$FORTIO_IP/fortio/rest/run?url=google.com" -o /dev/null
 200curl -s -w "%{http_code}" "http://$FORTIO_IP/fortio/rest/run?url=google.com"   0.01s user 0.01s system 0% cpu 5.446 total
@@ -112,7 +123,7 @@ Valid URL fetch example:
 
 With invalid URL the response returned is 400 and the uptime check monitor will be constantly in failed state.
 
-# Introducing failure and observing results
+## Introducing Failure and Observing Results
 
 To demonstrate failure detection, we make the "good" monitor fail by applying a network policy that blocks all traffic except pod, svc, vpc ranges and kube-dns, all other traffic is blocked as a result and fortio can't access internet.
 
@@ -125,9 +136,15 @@ $ time curl -s -w "%{http_code}" "http://$FORTIO_IP/fortio/rest/run?url=google.c
 
 The uptime check is configured with a 60-second period and 20-second timeout. Shortly after applying the network policy, the uptime check transitions to a failed status.
 
-[Video demo](https://drive.google.com/file/d/1369rE6ZecG0X5KSaIF7iCdhNxrk92Wwz/view?usp=sharing)
+### Demo Visuals
 
-### Screenshots
+#### Video
+
+Skip middle part while it is waiting on monitor to pick up failure
+
+#### Screenshots
+
+[Video demo](https://drive.google.com/file/d/1369rE6ZecG0X5KSaIF7iCdhNxrk92Wwz/view?usp=sharing)
 
 Initial state:
 

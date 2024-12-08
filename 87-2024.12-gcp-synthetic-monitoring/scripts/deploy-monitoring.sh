@@ -2,7 +2,7 @@
 
 set -eoux pipefail
 
-export SYNTH_APP_ENDPOINT="https://my-service.run.app"
+export SYNTH_APP_ENDPOINT="TODO"
 
 gcloud beta monitoring uptime create gke-test-connectivity \
     --resource-type=uptime-url \
