@@ -4,7 +4,6 @@ set -eoux pipefail
 SERVICE_NAME="fortio-test"
 
 gcloud run deploy $SERVICE_NAME \
---no-allow-unauthenticated \
 --image="fortio/fortio" \
 --network=$NETWORK \
 --subnet=$SUBNETWORK \
@@ -13,5 +12,6 @@ gcloud run deploy $SERVICE_NAME \
 --project=$PROJECT_ID
 
 #--network-tags=NETWORK_TAG_NAMES \
+#--no-allow-unauthenticated \
 
-export SERVICE_URL=$(gcloud run services describe fortio-test --format='value(status.url)')
+export SERVICE_URL=$(gcloud run services describe fortio-test --region=$REGION --format='value(status.url)')

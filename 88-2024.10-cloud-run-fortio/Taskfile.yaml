@@ -1,0 +1,67 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: gcloud config get-value project
+  SERVICE_NAME: cloudrun-info
+  REGION: us-central1  # Default region, can be overridden
+
+tasks:
+  build-local:
+    desc: Build the project locally
+    dir: src
+    cmds:
+      - go build -o bin/cloudrun-info
+
+  run-local:
+    desc: Run the service locally
+    dir: src
+    cmds:
+      - go run main.go
+
+  test:
+    desc: Run basic tests
+    dir: tests
+    cmds:
+      - ./basic.sh
+
+  build-image:
+    desc: Build and push Docker image to GCR
+    dir: src
+    cmds:
+      - echo "Building and pushing image to gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}"
+      - gcloud builds submit --tag gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}
+
+  deploy-info:
+    desc: Deploy the cloudrun-info service
+    deps: [build-image]
+    cmds:
+      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy {{.SERVICE_NAME}} 
+        --image gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}
+        --region {{.REGION}}
+        --platform managed
+        --allow-unauthenticated
+
+  deploy-fortio:
+    desc: Deploy the Fortio load testing service
+    cmds:
+      - ./scripts/deploy.sh
+
+  deploy-all:
+    desc: Deploy all services (both info and fortio)
+    cmds:
+      - task: deploy-info
+      - task: deploy-fortio
+
+  clean:
+    desc: Clean up built binaries and temporary files
+    cmds:
+      - rm -rf src/bin/*
+      - rm -f src/cr-info-local.json
+
+  help:
+    desc: Show list of available tasks and their descriptions
+    cmds:
+      - task --list
