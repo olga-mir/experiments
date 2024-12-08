@@ -23,7 +23,7 @@ graph LR
     SVC -->|Test Request| EXT[External Endpoint]
     
     %% Add monitoring flow
-    POD -->|Metrics| CM[Cloud Monitoring]
+    SVC -->|Metrics| CM[Cloud Monitoring]
     SM -->|Uptime Metrics| CM
     
     %% Styling
@@ -48,11 +48,8 @@ Deploy uptime checks:
 ```bash
 ./scripts/deploy-monitoring.sh
 ```
-## Uptime Checks
 
-https://cloud.google.com/monitoring/uptime-checks
-
-list uptime checks
+Explore deployed uptime checks:
 
 ```bash
 gcloud beta monitoring uptime list-configs
@@ -136,7 +133,7 @@ $ time curl -s -w "%{http_code}" "http://$FORTIO_IP/fortio/rest/run?url=google.c
 
 The uptime check is configured with a 60-second period and 20-second timeout. Shortly after applying the network policy, the uptime check transitions to a failed status.
 
-### Demo Visuals
+### Demo
 
 #### Video
 
