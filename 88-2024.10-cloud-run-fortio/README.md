@@ -2,17 +2,8 @@
 
 This project contains tools and services for exploring and understanding Google Cloud Run better. It provides various utilities for testing, monitoring, and experimenting with Cloud Run services.
 
-## Prerequisites
+## cloudrun-info
 
-- Go 1.21 or later
-- Task (taskfile) - Install from https://taskfile.dev
-- Google Cloud SDK
-- Docker
-- Access to a Google Cloud Project
-
-## Available Services
-
-### cloudrun-info
 A diagnostic service that provides detailed information about the Cloud Run environment. It exposes:
 - Environment variables
 - Network configuration
@@ -20,6 +11,10 @@ A diagnostic service that provides detailed information about the Cloud Run envi
 - File contents (/etc/hosts, resolv.conf)
 - Expanded as needed
 - eBPF ... when and if :D
+
+## Results
+
+View output collected from inside a CloudRun service in [./docs/cloudrun-info-dump.json](./docs/cloudrun-info-dump.json)
 
 ## Common Tasks
 
@@ -33,7 +28,6 @@ A diagnostic service that provides detailed information about the Cloud Run envi
 - `/docs` - Project documentation
 
 ```
-
 ├── Taskfile.yaml
 ├── scripts
 │   ├── deploy-bastion.sh
