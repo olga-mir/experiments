@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "8"
+  name: vllm-gemma-deployment
+  namespace: ai-apps
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: gemma-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        ai.gke.io/inference-server: vllm
+        ai.gke.io/model: gemma-2b-it
+        app: gemma-server
+    spec:
+      containers:
+      - args:
+        - --model=/tmp/gemma-2b-it-model-data/gemma-2b-it
+        - --tensor-parallel-size=1
+        - --dtype=half
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.api_server
+        env:
+        - name: HUGGINGFACE_OFFLINE
+          value: "1"
+        - name: TRANSFORMERS_OFFLINE
+          value: "1"
+        - name: MODEL_ID
+          value: gemma-2b-it
+        image: us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20240220_0936_RC01
+        imagePullPolicy: IfNotPresent
+        name: inference-server
+        resources:
+          limits:
+            cpu: "2"
+            ephemeral-storage: 10Gi
+            memory: 7Gi
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: "2"
+            ephemeral-storage: 10Gi
+            memory: 7Gi
+            nvidia.com/gpu: "1"
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /tmp/gemma-2b-it-model-data
+          name: model-data
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - gsutil
+        - -m
+        - cp
+        - -r
+        - gs://<YOUR_BUCKET_LOCATION>
+        - /tmp/gemma-2b-it-model-data
+        image: google/cloud-sdk
+        imagePullPolicy: Always
+        name: init-model
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /tmp/gemma-2b-it-model-data
+          name: model-data
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: dshm
+      - name: model-data
