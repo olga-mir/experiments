@@ -1,10 +1,9 @@
 version: '3'
 
 vars:
-  PROJECT_ID:
-    sh: gcloud config get-value project
+  #PROJECT_ID:
+  #  sh: gcloud config get-value project
   SERVICE_NAME: cloudrun-info
-  REGION: us-central1  # Default region, can be overridden
 
 tasks:
   build-local:

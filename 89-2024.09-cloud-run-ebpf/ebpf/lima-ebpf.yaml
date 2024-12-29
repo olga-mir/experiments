@@ -1,0 +1,38 @@
+minimumLimaVersion: "1.0.0"
+
+# https://github.com/lima-vm/lima/blob/e41a769b31f20cec65d85b16b0d71b11fe8a7a13/templates/ubuntu-24.10.yaml
+# Latest and greatest as of last week of 2024
+images:
+- location: "https://cloud-images.ubuntu.com/releases/24.10/release-20241212/ubuntu-24.10-server-cloudimg-arm64.img"
+  arch: "aarch64"
+  digest: "sha256:fb39312ffd2b47b97eaef6ff197912eaa3e0a215eb3eecfbf2a24acd96ee1125"
+
+cpus: 4
+memory: "8GiB"
+mounts:
+  - location: "~"
+    writable: true
+  - location: "/tmp/lima"
+    writable: true
+
+provision:
+  - mode: system
+    script: |
+      apt-get update
+      apt-get install -y \
+        clang \
+        llvm \
+        libelf-dev \
+        linux-headers-generic \
+        gcc \
+        make \
+        git \
+        bpftool \
+        docker.io
+      systemctl enable docker
+      systemctl start docker
+      usermod -aG docker $LIMA_CIDATA_USER
+
+containerd:
+  system: true
+  user: false

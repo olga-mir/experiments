@@ -1,17 +1,16 @@
 version: '3'
 
 tasks:
+  start-lima:
+    desc: start lima instance
+    cmds:
+      - limactl start --name ebpf-dev {{.TASKFILE_DIR}}/lima-ebpf.yaml --tty=false
+
   build:
     desc: "Build the Docker image for eBPF"
     cmds:
       - echo "Building Docker image..."
       - docker build -t ebpf-cloud-run:latest .
-
-  run-local:
-    desc: "Run the image locally in privileged mode to test eBPF"
-    cmds:
-      - echo "Running Docker image locally..."
-      - docker run --privileged -it ebpf-cloud-run:latest
 
   push:
     desc: "Push the image to Google Container Registry (GCR)"
@@ -34,7 +33,7 @@ tasks:
       - gcloud run deploy ebpf-demo \
           --image gcr.io/{{.PROJECT_ID}}/ebpf-cloud-run \
           --platform managed \
-          --region us-central1 \
+          --region {{.REGION}} \
           --allow-unauthenticated
     env:
       PROJECT_ID:
@@ -44,7 +43,10 @@ tasks:
     desc: "Run all tasks: build, test locally, push, and deploy"
     cmds:
       - task: build
-      - task: run-local
       - task: push
       - task: deploy
 
+  help:
+    desc: Show list of available tasks and their descriptions
+    cmds:
+      - task --list

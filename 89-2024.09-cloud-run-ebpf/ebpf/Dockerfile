@@ -1,31 +1,40 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.10 as builder
 
-RUN echo uname -r
-RUN echo uname -a
+# Add build argument for kernel version
+ARG KERNEL_VERSION
 
+# Install build dependencies with specific kernel headers
 RUN apt-get update && apt-get install -y \
     clang \
     llvm \
     libelf-dev \
-    gcc \
-    make \
-    iproute2 \
-    bpfcc-tools \
     linux-headers-generic \
-    python3 \
-    python3-pip \
-    linux-libc-dev
+    linux-tools-generic \
+    build-essential \
+    bpftool \
+    && rm -rf /var/lib/apt/lists/*
 
-#RUN wget http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-headers-$(uname -r)_all.deb && \
-#    dpkg -i linux-headers-$(uname -r)_all.deb
+WORKDIR /app
+COPY hello.bpf.c .
 
+# Build the eBPF program with correct includes
+RUN clang -O2 -g -target bpf \
+    -I/usr/include/$(uname -m)-linux-gnu \
+    -I/usr/include \
+    -I/usr/src/linux-headers-${KERNEL_VERSION}/include \
+    -I/usr/src/linux-headers-${KERNEL_VERSION}/arch/x86/include \
+    -c hello.bpf.c -o hello.bpf.o
 
-# TODO - fix linux-headers
-# linux-headers-$(uname -r) \
+FROM ubuntu:24.10
 
-# sudo ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
-# 
-COPY hello_bpf.c /usr/src/hello_bpf.c
-# RUN clang -O2 -target bpf -c /usr/src/hello_bpf.c -o /usr/src/hello_bpf.o
-# 
-# CMD ["bpftool", "prog", "load", "/usr/src/hello_bpf.o", "/sys/fs/bpf/hello"]
+RUN apt-get update && apt-get install -y \
+    bpftool \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/hello.bpf.o .
+
+RUN echo '#!/bin/sh\nbpftool prog load hello.bpf.o /sys/fs/bpf/hello\ntail -f /sys/kernel/debug/tracing/trace_pipe' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
