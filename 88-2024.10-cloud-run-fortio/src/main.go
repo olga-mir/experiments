@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"cr.explore.com/pkg/info"
+	sysinfo "cr.explore.com/pkg/info"
 )
 
 func main() {
@@ -15,7 +15,7 @@ func main() {
 
 	// Register handlers
 	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/info", info.HandleInfo)
+	http.HandleFunc("/info", sysinfo.HandleRequestInfo)
 
 	log.Printf("Starting server on port %s", *port)
 	if err := http.ListenAndServe(":"+*port, nil); err != nil {
