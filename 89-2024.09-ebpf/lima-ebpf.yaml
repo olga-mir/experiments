@@ -24,6 +24,7 @@ provision:
         llvm \
         libelf-dev \
         linux-headers-generic \
+        linux-tools-generic \
         gcc \
         make \
         git \

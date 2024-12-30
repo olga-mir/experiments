@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 )
 
 /*
@@ -26,7 +25,7 @@ func HandleRequestInfo(w http.ResponseWriter, r *http.Request) {
 	sysInfo := NewSystemInfo(
 		&UnixInfoCollector{},
 		&NetworkInfoCollector{},
-		NewMetadataCollector(1*time.Minute))
+		NewMetadataCollector())
 
 	// Collect all information
 	if err := sysInfo.CollectAll(); err != nil {

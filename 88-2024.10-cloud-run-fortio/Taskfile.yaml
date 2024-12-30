@@ -6,18 +6,6 @@ vars:
   SERVICE_NAME: cloudrun-info
 
 tasks:
-  build-local:
-    desc: Build the project locally
-    dir: src
-    cmds:
-      - go build -o bin/cloudrun-info
-
-  run-local:
-    desc: Run the service locally
-    dir: src
-    cmds:
-      - go run main.go
-
   test:
     desc: Run basic tests
     dir: tests
