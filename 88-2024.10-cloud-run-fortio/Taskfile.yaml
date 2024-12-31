@@ -9,6 +9,13 @@ vars:
         exit 1
       fi
       echo "${PROJECT_ID}"
+  REGION:
+    sh: |
+      if [ -z "${REGION}" ]; then
+        echo "ERROR: REGION environment variable is not set" >&2
+        exit 1
+      fi
+      echo "${REGION}"
   NETWORK:
     sh: |
       if [ -z "${NETWORK}" ]; then
@@ -31,18 +38,20 @@ vars:
         exit 1
       fi
       echo "${SUBNETWORK}"
-  REGION:
+  USER_EMAIL:
     sh: |
-      if [ -z "${REGION}" ]; then
-        echo "ERROR: REGION environment variable is not set" >&2
+      if [ -z "${USER_EMAIL}" ]; then
+        echo "ERROR: USER_EMAIL environment variable is not set" >&2
         exit 1
       fi
-      echo "${REGION}"
+      echo "${USER_EMAIL}"
 
+  # Service configuration
   SERVICE_NAME: cloudrun-info
+  SERVICE_ACCOUNT: '{{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com'
+  FORTIO_SERVICE_ACCOUNT: 'fortio@{{.PROJECT_ID}}.iam.gserviceaccount.com'
 
   # Artifact Registry configuration
-  REGISTRY_LOCATION: '{{.REGION}}'
   REGISTRY_REPO: cloud-run-apps
   IMAGE_PATH: '{{.REGION}}-docker.pkg.dev/{{.PROJECT_ID}}/{{.REGISTRY_REPO}}/{{.SERVICE_NAME}}'
 
@@ -60,9 +69,54 @@ tasks:
     cmds:
       - ./basic.sh
 
+  ensure-service-account:
+    desc: Ensure service account exists and has proper permissions
+    internal: true
+    vars:
+      SA_NAME: '{{.SERVICE_NAME}}'
+      SA_EMAIL: '{{.SERVICE_ACCOUNT}}'
+    status:
+      - gcloud iam service-accounts describe {{.SA_EMAIL}} --quiet 2>/dev/null
+      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "serviceAccount:{{.SA_EMAIL}}"
+      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "user:{{.USER_EMAIL}}" | grep "roles/iam.serviceAccountUser"
+    cmds:
+      - echo "Setting up service account {{.SA_EMAIL}}..."
+      - gcloud iam service-accounts create {{.SA_NAME}} --display-name="Cloud Run Info Service" || true
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="serviceAccount:{{.SA_EMAIL}}"
+        --role="roles/run.invoker"
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="user:{{.USER_EMAIL}}"
+        --role="roles/iam.serviceAccountUser"
+        --condition=None
+
+  ensure-fortio-service-account:
+    desc: Ensure Fortio service account exists and has proper permissions
+    internal: true
+    vars:
+      SA_NAME: 'fortio'
+      SA_EMAIL: '{{.FORTIO_SERVICE_ACCOUNT}}'
+    status:
+      - gcloud iam service-accounts describe {{.SA_EMAIL}} --quiet 2>/dev/null
+      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "serviceAccount:{{.SA_EMAIL}}"
+      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "user:{{.USER_EMAIL}}" | grep "roles/iam.serviceAccountUser"
+    cmds:
+      - echo "Setting up Fortio service account {{.SA_EMAIL}}..."
+      - gcloud iam service-accounts create {{.SA_NAME}} --display-name="Fortio Load Testing Service" || true
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="serviceAccount:{{.SA_EMAIL}}"
+        --role="roles/run.invoker"
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="user:{{.USER_EMAIL}}"
+        --role="roles/iam.serviceAccountUser"
+        --condition=None
+
   build-image:
     desc: Build and push Docker image to Artifact Registry
-    #deps: [validate-env]
     dir: src
     vars:
       FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
@@ -80,53 +134,58 @@ tasks:
       - docker push {{.IMAGE_PATH}}:latest
 
   deploy-info:
-    desc: Deploy the cloudrun-info service
-    deps: [build-image]
+    desc: Deploy the cloudrun-info service with security configurations
+    deps: [build-image, ensure-service-account]
     cmds:
-      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
+      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}} with security settings"
       - >
         gcloud run deploy {{.SERVICE_NAME}}
         --image {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
         --region {{.REGION}}
         --platform managed
         --no-allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
-        --service-account {{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com
+        --service-account {{.SERVICE_ACCOUNT}}
         --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
       - echo "Setting up IAM policies..."
       - >
         gcloud run services add-iam-policy-binding {{.SERVICE_NAME}}
         --region={{.REGION}}
-        --member="user:$USER_EMAIL"
+        --member="user:{{.USER_EMAIL}}"
         --role="roles/run.invoker"
 
   deploy-fortio:
-    desc: Deploy the Fortio load testing service
+    desc: Deploy Fortio load testing service
+    deps: [ensure-fortio-service-account]
     cmds:
-      - echo "Deploying fortio to Cloud Run in {{.REGION}}"
+      - echo "Deploying Fortio to Cloud Run in {{.REGION}}"
       - >
-        gcloud run deploy fortio-service
-        --image fortio/fortio
+        gcloud run deploy fortio
+        --image gcr.io/fortio/fortio
         --region {{.REGION}}
         --platform managed
         --no-allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
+        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
+      - >
+        gcloud run services add-iam-policy-binding fortio
+        --region={{.REGION}}
+        --member="user:{{.USER_EMAIL}}"
+        --role="roles/run.invoker"
 
   deploy-all:
     desc: Deploy all services (both info and fortio)
     cmds:
       - task: deploy-info
       - task: deploy-fortio
-
-  clean:
-    desc: Clean up built binaries and temporary files
-    cmds:
-      - rm -rf src/bin/*
-      - rm -f src/cr-info-local.json
 
   get-auth-token:
     desc: Get authentication token for accessing the service
@@ -146,7 +205,14 @@ tasks:
         URL=$(task get-service-url)
         curl -H "Authorization: Bearer $TOKEN" $URL
 
+  clean:
+    desc: Clean up built binaries and temporary files
+    cmds:
+      - rm -rf src/bin/*
+      - rm -f src/cr-info-local.json
+
   help:
     desc: Show list of available tasks and their descriptions
     cmds:
       - task --list
+
