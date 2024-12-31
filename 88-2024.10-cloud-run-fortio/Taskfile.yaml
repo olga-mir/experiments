@@ -122,13 +122,14 @@ tasks:
       FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:
       - echo "Building and pushing image to {{.FULL_IMAGE_TAG}}"
+      # https://github.com/olga-mir/experiments/blob/c463d0e08acbbdce3ff7447b6dfcaab005330c45/88-2024.10-cloud-run-fortio/docs/cloudrun-info-dump.json#L53-L56
+      # Cloud Run runs in gvisor with `Linux localhost 4.4.0 #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 Linux` amd64
       - >
-        docker build -f Dockerfile
-        --build-arg TARGETOS=linux
-        --build-arg TARGETARCH=amd64
+        docker buildx build -f Dockerfile
+        --platform linux/amd64,linux/arm64
         --build-arg LDFLAGS="{{.LDFLAGS}}"
-        -t {{.FULL_IMAGE_TAG}} .
-      - docker push {{.FULL_IMAGE_TAG}}
+        -t {{.FULL_IMAGE_TAG}}
+        --push .
       # Tag as latest for convenience
       - docker tag {{.FULL_IMAGE_TAG}} {{.IMAGE_PATH}}:latest
       - docker push {{.IMAGE_PATH}}:latest
