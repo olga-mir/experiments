@@ -1,6 +1,7 @@
 package sysinfo
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,16 +30,19 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 		}
 	}
 
+	if toStubOrNotToSub() {
+		return map[string]interface{}{
+			"metadata": "nothing interesting to see here. only SA",
+		}, nil
+	}
+
 	// Create request for the recursive endpoint
 	req, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/?recursive=true", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metadata request: %w", err)
 	}
 
-	// Add required header
 	req.Header.Add("Metadata-Flavor", "Google")
-
-	// Make the request
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query metadata server: %w", err)
@@ -49,19 +53,24 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("metadata server returned status %d", resp.StatusCode)
 	}
 
-	// Read body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata response: %w", err)
 	}
 
-	// Parse JSON into a map without predefined structure
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse metadata response: %w", err)
 	}
 
-	// Also try to get the internal IP specifically
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, body, "", "    "); err != nil {
+		fmt.Printf("Failed to format JSON: %v\n", err)
+	} else {
+		fmt.Println(prettyJSON.String())
+	}
+
+	// no info on interfaces is available
 	internalIPReq, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/instance/network-interfaces/0/ip", nil)
 	if err == nil {
 		internalIPReq.Header.Add("Metadata-Flavor", "Google")
@@ -75,35 +84,11 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 		}
 	}
 
-	// Try to get the VPC network name
-	networkReq, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/instance/network-interfaces/0/network", nil)
-	if err == nil {
-		networkReq.Header.Add("Metadata-Flavor", "Google")
-		if networkResp, err := c.Client.Do(networkReq); err == nil {
-			defer networkResp.Body.Close()
-			if networkResp.StatusCode == http.StatusOK {
-				if networkBytes, err := io.ReadAll(networkResp.Body); err == nil {
-					result["vpc_network"] = string(networkBytes)
-				}
-			}
-		}
-	}
-
-	// Try to get the subnet name
-	subnetReq, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/instance/network-interfaces/0/subnet", nil)
-	if err == nil {
-		subnetReq.Header.Add("Metadata-Flavor", "Google")
-		if subnetResp, err := c.Client.Do(subnetReq); err == nil {
-			defer subnetResp.Body.Close()
-			if subnetResp.StatusCode == http.StatusOK {
-				if subnetBytes, err := io.ReadAll(subnetResp.Body); err == nil {
-					result["vpc_subnet"] = string(subnetBytes)
-				}
-			}
-		}
-	}
-
 	return map[string]interface{}{
 		"metadata": result,
 	}, nil
+}
+
+func toStubOrNotToSub() bool {
+	return true
 }

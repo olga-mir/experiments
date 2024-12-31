@@ -49,7 +49,7 @@ func setupCloudProfiler() {
 
 	// Start profiler https://cloud.google.com/profiler/docs/profiling-go#gke
 	cfg := profiler.Config{
-		Service:        "demooperator",
+		Service:        "cloud-run-info",
 		ServiceVersion: GitCommit,
 		DebugLogging:   true,
 	}

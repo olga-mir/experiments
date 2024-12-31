@@ -72,19 +72,17 @@ tasks:
   ensure-service-account:
     desc: Ensure service account exists and has proper permissions
     internal: true
-    vars:
-      SA_NAME: '{{.SERVICE_NAME}}'
-      SA_EMAIL: '{{.SERVICE_ACCOUNT}}'
     status:
-      - gcloud iam service-accounts describe {{.SA_EMAIL}} --quiet 2>/dev/null
-      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "serviceAccount:{{.SA_EMAIL}}"
-      - gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "user:{{.USER_EMAIL}}" | grep "roles/iam.serviceAccountUser"
+      - gcloud iam service-accounts describe {{.SERVICE_ACCOUNT}} || exit 1
+      #- gcloud iam service-accounts describe {{.SERVICE_ACCOUNT}} --quiet 2>/dev/null
+      #- gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "serviceAccount:{{.SERVICE_ACCOUNT}}"
+      #- gcloud projects get-iam-policy {{.PROJECT_ID}} --format='get(bindings[].members)' | grep "user:{{.USER_EMAIL}}" | grep "roles/iam.serviceAccountUser"
     cmds:
-      - echo "Setting up service account {{.SA_EMAIL}}..."
-      - gcloud iam service-accounts create {{.SA_NAME}} --display-name="Cloud Run Info Service" || true
+      - echo "Setting up service account {{.SERVICE_ACCOUNT}}..."
+      - gcloud iam service-accounts create {{.SERVICE_NAME}} --display-name="Cloud Run Info Service" || true
       - >
         gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
-        --member="serviceAccount:{{.SA_EMAIL}}"
+        --member="serviceAccount:{{.SERVICE_ACCOUNT}}"
         --role="roles/run.invoker"
       - >
         gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
@@ -118,6 +116,13 @@ tasks:
   build-image:
     desc: Build and push Docker image to Artifact Registry
     dir: src
+    sources:
+      - Dockerfile
+      - main.go
+      - pkg/**/*.go
+      - go.mod
+      - go.sum
+    method: checksum
     vars:
       FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:
@@ -129,10 +134,8 @@ tasks:
         --platform linux/amd64,linux/arm64
         --build-arg LDFLAGS="{{.LDFLAGS}}"
         -t {{.FULL_IMAGE_TAG}}
+        -t {{.IMAGE_PATH}}:latest
         --push .
-      # Tag as latest for convenience
-      - docker tag {{.FULL_IMAGE_TAG}} {{.IMAGE_PATH}}:latest
-      - docker push {{.IMAGE_PATH}}:latest
 
   deploy-info:
     desc: Deploy the cloudrun-info service with security configurations
@@ -204,13 +207,7 @@ tasks:
       - |
         TOKEN=$(task get-auth-token)
         URL=$(task get-service-url)
-        curl -H "Authorization: Bearer $TOKEN" $URL
-
-  clean:
-    desc: Clean up built binaries and temporary files
-    cmds:
-      - rm -rf src/bin/*
-      - rm -f src/cr-info-local.json
+        curl -s -H "Authorization: Bearer $TOKEN" $URL
 
   help:
     desc: Show list of available tasks and their descriptions

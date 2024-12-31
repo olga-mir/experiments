@@ -1,7 +1,6 @@
 package sysinfo
 
 import (
-	"bufio"
 	"os"
 	"strings"
 
@@ -25,11 +24,8 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var defaultGateway string
-	var routes []RouteInfo
-	var interfaces [string]interface{}
-
 	// Process interfaces
+	var interfaces []map[string]interface{}
 	for _, link := range links {
 		addrs, err := netlink.AddrList(link, unix.AF_UNSPEC)
 		if err != nil {
@@ -46,6 +42,8 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 	}
 
 	// Get routing table using netlink
+	var routes []RouteInfo
+	var defaultGateway string
 	nlRoutes, err := netlink.RouteList(nil, unix.AF_UNSPEC)
 	if err == nil {
 		for _, route := range nlRoutes {
@@ -77,26 +75,36 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 		}
 	}
 
-	// Get nameservers from resolv.conf
-	var nameservers []string
-	if file, err := os.Open("/etc/resolv.conf"); err == nil {
-		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if strings.HasPrefix(line, "nameserver") {
-				fields := strings.Fields(line)
-				if len(fields) > 1 {
-					nameservers = append(nameservers, fields[1])
-				}
-			}
+	readFileContent := func(path string) ([]string, error) {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
 		}
+		return strings.Split(strings.TrimSpace(string(content)), "\n"), nil
 	}
 
+	resolvConf, _ := readFileContent("/etc/resolv.conf")
+	etcHosts, _ := readFileContent("/etc/hosts")
+	nsSwitch, _ := readFileContent("/etc/nsswitch.conf")
+	containerEnv, _ := readFileContent("/.dockerenv")
+	cgroups, _ := readFileContent("/proc/1/cgroup")
+	mountInfo, _ := readFileContent("/proc/mounts")
+	limits, _ := readFileContent("/proc/self/limits")
+
 	return map[string]interface{}{
-		"interfaces":  interfaces,
-		"gateway":     defaultGateway,
-		"routes":      routes,
-		"nameservers": nameservers,
+		"interfaces": interfaces,
+		"gateway":    defaultGateway,
+		"routes":     routes,
+		"dns": map[string]interface{}{
+			"resolv_conf": resolvConf,
+			"etc_hosts":   etcHosts,
+			"nsswitch":    nsSwitch,
+		},
+		"system": map[string]interface{}{
+			"mounts":       mountInfo,
+			"cgroups":      cgroups,
+			"limits":       limits,
+			"is_container": containerEnv != nil,
+		},
 	}, nil
 }
