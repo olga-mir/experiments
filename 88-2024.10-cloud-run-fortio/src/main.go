@@ -11,6 +11,12 @@ import (
 	sysinfo "cr.explore.com/pkg/info"
 )
 
+var (
+	Version   = "runtimevar"
+	GitCommit = "runtimevar"
+	BuildDate = "runtimevar"
+)
+
 func main() {
 	setupCloudProfiler()
 
@@ -44,7 +50,7 @@ func setupCloudProfiler() {
 	// Start profiler https://cloud.google.com/profiler/docs/profiling-go#gke
 	cfg := profiler.Config{
 		Service:        "demooperator",
-		ServiceVersion: Commit,
+		ServiceVersion: GitCommit,
 		DebugLogging:   true,
 	}
 

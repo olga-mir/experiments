@@ -1,9 +1,57 @@
 version: '3'
 
 vars:
-  #PROJECT_ID:
-  #  sh: gcloud config get-value project
+  # Required environment variables validation
+  PROJECT_ID:
+    sh: |
+      if [ -z "${PROJECT_ID}" ]; then
+        echo "ERROR: PROJECT_ID environment variable is not set" >&2
+        exit 1
+      fi
+      echo "${PROJECT_ID}"
+  NETWORK:
+    sh: |
+      if [ -z "${NETWORK}" ]; then
+        echo "ERROR: NETWORK environment variable is not set" >&2
+        exit 1
+      fi
+      if ! gcloud compute networks describe "${NETWORK}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+        echo "ERROR: Network ${NETWORK} does not exist in project ${PROJECT_ID}" >&2
+        exit 1
+      fi
+      echo "${NETWORK}"
+  SUBNETWORK:
+    sh: |
+      if [ -z "${SUBNETWORK}" ]; then
+        echo "ERROR: SUBNETWORK environment variable is not set" >&2
+        exit 1
+      fi
+      if ! gcloud compute networks subnets describe "${SUBNETWORK}" --project="${PROJECT_ID}" --region="${REGION}" >/dev/null 2>&1; then
+        echo "ERROR: Subnetwork ${SUBNETWORK} does not exist in project ${PROJECT_ID}, region ${REGION}" >&2
+        exit 1
+      fi
+      echo "${SUBNETWORK}"
+  REGION:
+    sh: |
+      if [ -z "${REGION}" ]; then
+        echo "ERROR: REGION environment variable is not set" >&2
+        exit 1
+      fi
+      echo "${REGION}"
+
   SERVICE_NAME: cloudrun-info
+
+  # Artifact Registry configuration
+  REGISTRY_LOCATION: '{{.REGION}}'
+  REGISTRY_REPO: cloud-run-apps
+  IMAGE_PATH: '{{.REGION}}-docker.pkg.dev/{{.PROJECT_ID}}/{{.REGISTRY_REPO}}/{{.SERVICE_NAME}}'
+
+  # Build configuration
+  BUILD_TIME:
+    sh: date -u '+%Y-%m-%d_%H:%M:%S'
+  GIT_COMMIT:
+    sh: git rev-parse HEAD
+  LDFLAGS: '-X main.buildTime={{.BUILD_TIME}} -X main.gitCommit={{.GIT_COMMIT}}'
 
 tasks:
   test:
@@ -13,11 +61,23 @@ tasks:
       - ./basic.sh
 
   build-image:
-    desc: Build and push Docker image to GCR
+    desc: Build and push Docker image to Artifact Registry
+    #deps: [validate-env]
     dir: src
+    vars:
+      FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:
-      - echo "Building and pushing image to gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}"
-      - gcloud builds submit --tag gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}
+      - echo "Building and pushing image to {{.FULL_IMAGE_TAG}}"
+      - >
+        docker build -f Dockerfile
+        --build-arg TARGETOS=linux
+        --build-arg TARGETARCH=amd64
+        --build-arg LDFLAGS="{{.LDFLAGS}}"
+        -t {{.FULL_IMAGE_TAG}} .
+      - docker push {{.FULL_IMAGE_TAG}}
+      # Tag as latest for convenience
+      - docker tag {{.FULL_IMAGE_TAG}} {{.IMAGE_PATH}}:latest
+      - docker push {{.IMAGE_PATH}}:latest
 
   deploy-info:
     desc: Deploy the cloudrun-info service
@@ -25,16 +85,36 @@ tasks:
     cmds:
       - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
       - >
-        gcloud run deploy {{.SERVICE_NAME}} 
-        --image gcr.io/{{.PROJECT_ID}}/{{.SERVICE_NAME}}
+        gcloud run deploy {{.SERVICE_NAME}}
+        --image {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
         --region {{.REGION}}
         --platform managed
-        --allow-unauthenticated
+        --no-allow-unauthenticated
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --service-account {{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com
+        --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
+      - echo "Setting up IAM policies..."
+      - >
+        gcloud run services add-iam-policy-binding {{.SERVICE_NAME}}
+        --region={{.REGION}}
+        --member="user:$USER_EMAIL"
+        --role="roles/run.invoker"
 
   deploy-fortio:
     desc: Deploy the Fortio load testing service
     cmds:
-      - ./scripts/deploy.sh
+      - echo "Deploying fortio to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy fortio-service
+        --image fortio/fortio
+        --region {{.REGION}}
+        --platform managed
+        --no-allow-unauthenticated
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
 
   deploy-all:
     desc: Deploy all services (both info and fortio)
@@ -47,6 +127,24 @@ tasks:
     cmds:
       - rm -rf src/bin/*
       - rm -f src/cr-info-local.json
+
+  get-auth-token:
+    desc: Get authentication token for accessing the service
+    cmds:
+      - gcloud auth print-identity-token
+
+  get-service-url:
+    desc: Get the service URL
+    cmds:
+      - gcloud run services describe {{.SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)'
+
+  call-service:
+    desc: Call the service using curl with authentication
+    cmds:
+      - |
+        TOKEN=$(task get-auth-token)
+        URL=$(task get-service-url)
+        curl -H "Authorization: Bearer $TOKEN" $URL
 
   help:
     desc: Show list of available tasks and their descriptions
