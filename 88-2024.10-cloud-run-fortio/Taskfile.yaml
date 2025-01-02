@@ -131,7 +131,7 @@ tasks:
       # Cloud Run runs in gvisor with `Linux localhost 4.4.0 #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64 Linux` amd64
       - >
         docker buildx build -f Dockerfile
-        --platform linux/amd64,linux/arm64
+        --platform linux/amd64
         --build-arg LDFLAGS="{{.LDFLAGS}}"
         -t {{.FULL_IMAGE_TAG}}
         -t {{.IMAGE_PATH}}:latest
@@ -169,7 +169,7 @@ tasks:
       - echo "Deploying Fortio to Cloud Run in {{.REGION}}"
       - >
         gcloud run deploy fortio
-        --image gcr.io/fortio/fortio
+        --image fortio/fortio
         --region {{.REGION}}
         --platform managed
         --no-allow-unauthenticated
@@ -202,12 +202,11 @@ tasks:
       - gcloud run services describe {{.SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)'
 
   call-service:
-    desc: Call the service using curl with authentication
+    desc: Print command to run on a VM on the CR network
     cmds:
       - |
-        TOKEN=$(task get-auth-token)
         URL=$(task get-service-url)
-        curl -s -H "Authorization: Bearer $TOKEN" $URL
+        echo "curl -s -H \"Authorization: Bearer \$TOKEN\" $URL"
 
   help:
     desc: Show list of available tasks and their descriptions

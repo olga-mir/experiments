@@ -30,13 +30,6 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 		}
 	}
 
-	if toStubOrNotToSub() {
-		return map[string]interface{}{
-			"metadata": "nothing interesting to see here. only SA",
-		}, nil
-	}
-
-	// Create request for the recursive endpoint
 	req, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/?recursive=true", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metadata request: %w", err)
@@ -70,7 +63,7 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 		fmt.Println(prettyJSON.String())
 	}
 
-	// no info on interfaces is available
+	// Metadata endpoint does not provide any information on interfaces
 	internalIPReq, err := http.NewRequest("GET", c.baseURL+"/computeMetadata/v1/instance/network-interfaces/0/ip", nil)
 	if err == nil {
 		internalIPReq.Header.Add("Metadata-Flavor", "Google")
@@ -87,8 +80,4 @@ func (c *MetadataCollector) Collect() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"metadata": result,
 	}, nil
-}
-
-func toStubOrNotToSub() bool {
-	return true
 }

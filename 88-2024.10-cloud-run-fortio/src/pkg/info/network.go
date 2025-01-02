@@ -24,7 +24,6 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// Process interfaces
 	var interfaces []map[string]interface{}
 	for _, link := range links {
 		addrs, err := netlink.AddrList(link, unix.AF_UNSPEC)
@@ -32,12 +31,32 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 			continue
 		}
 
-		// Create a map for each interface with its properties
 		ifaceInfo := map[string]interface{}{
 			"name":       link.Attrs().Name,
-			"addresses":  addrs, // Using the netlink.Addr directly
 			"macAddress": link.Attrs().HardwareAddr.String(),
+			"addresses":  make([]map[string]interface{}, 0, len(addrs)),
 		}
+
+		for _, addr := range addrs {
+			addrMap := map[string]interface{}{
+				"ip":   addr.IP.String(),
+				"mask": addr.Mask.String(),
+				//"prefixLen": maskToPrefixLen(addr.Mask),
+				"scope": addr.Scope,
+			}
+
+			if addr.Broadcast != nil {
+				addrMap["broadcast"] = addr.Broadcast.String()
+			}
+
+			// Label like "ipvlan-eth0"
+			if addr.Label != "" {
+				addrMap["label"] = addr.Label
+			}
+
+			ifaceInfo["addresses"] = append(ifaceInfo["addresses"].([]map[string]interface{}), addrMap)
+		}
+
 		interfaces = append(interfaces, ifaceInfo)
 	}
 

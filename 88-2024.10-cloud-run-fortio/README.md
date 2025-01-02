@@ -1,51 +1,22 @@
-# Cloud Run Exploration Tools
+# Cloud Run Exploration
 
-This project contains tools and services for exploring and understanding Google Cloud Run better. It provides various utilities for testing, monitoring, and experimenting with Cloud Run services.
+This folder contains tools to better understand how Cloud Run works. It consists of 2 main parts - `info` service and `fortio` service.
+Info service is a golang app which reads a bunch of system information and returns it as a json to the caller.
+Fortio is a helper service used to invoke Cloud Run apps and observe different behaviours.
 
-## cloudrun-info
-
-A diagnostic service that provides detailed information about the Cloud Run environment. It exposes:
-- Environment variables
-- Network configuration
-- System information
-- File contents (/etc/hosts, resolv.conf)
-- Expanded as needed
-- eBPF ... when and if :D
-
-## Results
+## Observations
 
 View output collected from inside a CloudRun service in [./docs/cloudrun-info-dump.json](./docs/cloudrun-info-dump.json)
+
+
 
 ## Common Tasks
 
 `task help` to see all available operations
 
-## Project Structure
+`task deploy-info` to build image, setup IAM and deploy `info` serevice Cloud Run
 
-- `/src` - Source code for all services
-- `/scripts` - Deployment and utility scripts
-- `/tests` - Test scripts
-- `/docs` - Project documentation
-
-```
-├── Taskfile.yaml
-├── scripts
-│   ├── deploy-bastion.sh
-│   └── deploy.sh
-├── src
-│   ├── Dockerfile
-│   ├── go.mod
-│   ├── main.go
-│   └── pkg
-│       └── info
-│           └── info.go
-├─── docs/  # docs and some output snippets that provide insights into Cloud Run environment
-│    └── ...
-└── tests
-    └── basic.sh
-```
 
 ## License
 
 Root repo: https://github.com/olga-mir/experiments/blob/main/LICENSE
-

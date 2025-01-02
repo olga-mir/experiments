@@ -5,7 +5,7 @@ set -eou pipefail
 # "msg":"REST API on /fortio/rest/run, /fortio/rest/status, /fortio/rest/stop, /fortio/rest/dns"
 # "msg":"Debug endpoint on /debug, Additional Echo on /debug/echo/, Flags on /fortio/flags, and Metrics on /debug/metrics"
 
-export SERVICE_URL=$(gcloud run services describe fortio-test --region=$REGION --format='value(status.url)')
+export SERVICE_URL=$(gcloud run services describe fortio --region=$REGION --format='value(status.url)')
 export TOKEN=$(gcloud auth print-identity-token)
 
 OUTPUT_DIR="test-results"

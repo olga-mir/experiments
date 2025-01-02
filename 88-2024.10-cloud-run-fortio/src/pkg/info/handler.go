@@ -24,8 +24,10 @@ func NewHandler(collectors ...Collector) *Handler {
 func HandleRequestInfo(w http.ResponseWriter, r *http.Request) {
 	sysInfo := NewSystemInfo(
 		&UnixInfoCollector{},
-		&NetworkInfoCollector{},
-		NewMetadataCollector())
+		&NetworkInfoCollector{})
+	//NewMetadataCollector())
+	// Disable metadata collector because it does not provide any interesting information
+	// It displays list of SAs associated with the instance.
 
 	// Collect all information
 	if err := sysInfo.CollectAll(); err != nil {

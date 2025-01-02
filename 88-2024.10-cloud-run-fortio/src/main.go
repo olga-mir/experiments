@@ -43,7 +43,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 func setupCloudProfiler() {
 	_, isSet := os.LookupEnv("PROJECT_ID")
 	if !isSet {
-		fmt.Printf("PROJECT_ID environment variable not set - when not running in GCP Profiler will not work")
+		fmt.Printf("PROJECT_ID environment variable not set - when not running in GCP, Cloud Profiler will be disabled")
 		return
 	}
 
@@ -55,8 +55,8 @@ func setupCloudProfiler() {
 	}
 
 	if err := profiler.Start(cfg); err != nil {
-		fmt.Errorf("Unable to start Profiler", err)
-	} else {
-		fmt.Println("Started Profiler")
+		fmt.Printf("Unable to start Profiler, %v\n", err)
+		return
 	}
+	fmt.Println("Started Profiler")
 }
