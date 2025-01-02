@@ -39,9 +39,8 @@ func (c *NetworkInfoCollector) Collect() (map[string]interface{}, error) {
 
 		for _, addr := range addrs {
 			addrMap := map[string]interface{}{
-				"ip":   addr.IP.String(),
-				"mask": addr.Mask.String(),
-				//"prefixLen": maskToPrefixLen(addr.Mask),
+				"ip":    addr.IP.String(),
+				"mask":  addr.Mask.String(),
 				"scope": addr.Scope,
 			}
 

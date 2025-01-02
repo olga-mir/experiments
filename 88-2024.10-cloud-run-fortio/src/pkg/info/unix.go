@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -29,8 +30,10 @@ func (c *UnixInfoCollector) Collect() (map[string]interface{}, error) {
 	}
 
 	info := map[string]interface{}{
-		"os":  osInfo,
-		"env": envVars,
+		"os":         osInfo,
+		"env":        envVars,
+		"NumCPU":     runtime.NumCPU(),
+		"GOMAXPROCS": runtime.GOMAXPROCS(0),
 	}
 
 	return info, nil
