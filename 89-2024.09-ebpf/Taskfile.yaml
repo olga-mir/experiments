@@ -1,47 +1,102 @@
 version: '3'
 
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+  SERVICE_NAME: experiment-ebpf
+  SERVICE_ACCOUNT:
+    sh: echo "{{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
+  ARTIFACT_REGISTRY: "{{.REGION}}-docker.pkg.dev"
+  IMAGE_PATH: "{{.ARTIFACT_REGISTRY}}/{{.PROJECT_ID}}/{{.SERVICE_NAME}}"
+  GIT_COMMIT:
+    sh: git rev-parse --short HEAD
+
 tasks:
+  validate-env:
+    desc: Validate all required environment variables are set
+    cmds:
+      - echo "Validating environment variables..."
+      - echo "PROJECT_ID={{.PROJECT_ID}}"
+      - echo "REGION={{.REGION}}"
+      - echo "NETWORK={{.NETWORK}}"
+      - echo "SUBNETWORK={{.SUBNETWORK}}"
+      - echo "All required variables are set!"
+
   start-lima:
-    desc: start lima instance
+    desc: Start lima instance
     cmds:
       - limactl start --name ebpf-dev {{.TASKFILE_DIR}}/lima-ebpf.yaml --tty=false
 
-  ensure-service-account:
-    desc: Ensure service account exists and has proper permissions
+  setup-lima:
+    desc: Set up lima instance with required tools
+    deps: [start-lima]
+    cmds:
+      - echo "Installing Task inside Lima instance..."
+      - limactl shell ebpf-dev sudo sh -c 'curl -sL https://taskfile.dev/install.sh | sh'
+      - limactl shell ebpf-dev sudo sh -c 'mv ./bin/task /usr/local/bin/task && chmod +x /usr/local/bin/task'
+      # shouldn't be necessary because local dir is already mounted
+      #- echo "Copying Taskfile to Lima instance..."
+      #- limactl copy {{.TASKFILE_DIR}}/Taskfile.yml ebpf-dev:/home/lima/Taskfile.yml
+
+  ensure-artifact-registry:
     internal: true
+    desc: Create Artifact Registry repository if it doesn't exist
+    cmds:
+      - |
+        if ! gcloud artifacts repositories describe {{.SERVICE_NAME}} --location={{.REGION}} 2>/dev/null; then
+          echo "Creating Artifact Registry repository..."
+          gcloud artifacts repositories create {{.SERVICE_NAME}} \
+            --repository-format=docker \
+            --location={{.REGION}} \
+            --description="Repository for eBPF experiments"
+        fi
+
+  ensure-service-account:
+    internal: true
+    desc: Ensure service account exists and has proper permissions
     status:
-      - gcloud iam service-accounts describe {{.SERVICE_ACCOUNT}} || exit 1
+      - gcloud iam service-accounts describe {{.SERVICE_ACCOUNT}} 2>/dev/null
     cmds:
       - echo "Setting up service account {{.SERVICE_ACCOUNT}}..."
-      - gcloud iam service-accounts create {{.SERVICE_NAME}} --display-name="Cloud Run experiment 89-2024.09-ebpf" || true
+      - gcloud iam service-accounts create {{.SERVICE_NAME}} --display-name="Cloud Run experiment eBPF https://github.com/olga-mir/experiments/tree/main/89-2024.09-ebpf" || true
       - >
         gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
         --member="serviceAccount:{{.SERVICE_ACCOUNT}}"
         --role="roles/run.invoker"
       - >
         gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
-        --member="user:{{.USER_EMAIL}}"
+        --member="user:${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
         --role="roles/iam.serviceAccountUser"
         --condition=None
 
-  build-push-image:
-    desc: "Push the image to Google Container Registry (GCR)"
-    vars:
-      registry: "gcr.io"
-      project_id: "{{.PROJECT_ID}}"
+  docker-auth:
+    desc: Configure Docker authentication for Artifact Registry. Run this from local, to avoid gcloud auth inside lima instance
+    # while this can be done inside lima with some effort, it is just easier to do from local:
+    # "gcloud": executable file not found in $PATH
+    # Error: Cannot perform an interactive login from a non TTY device
     cmds:
-      - docker build -t ebpf-cloud-run:latest .
-      - echo "Tagging the image for GCR..."
-      - docker tag ebpf-cloud-run {{.registry}}/{{.project_id}}/ebpf-cloud-run
-      - echo "Pushing the image to GCR..."
-      - docker push {{.registry}}/{{.project_id}}/ebpf-cloud-run
-    env:
-      PROJECT_ID:
-        sh: echo "$PROJECT_ID"
+      - limactl shell ebpf-dev docker login -u oauth2accesstoken --password-stdin {{.ARTIFACT_REGISTRY}} <<< $(gcloud auth print-access-token)
+
+  build-image-lima:
+    desc: Build image inside Lima instance
+    deps: [docker-auth]
+    cmds:
+      - |
+        docker buildx build -f Dockerfile
+        -t {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
+        -t {{.IMAGE_PATH}}:latest
+        --platform linux/amd64
+        --push .
 
   deploy-cloud-run:
     desc: Deploy image to Cloud Run env
-    deps: [build-image, ensure-service-account]
+    deps: [validate-env, ensure-service-account]
     cmds:
       - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
       - >
@@ -56,7 +111,6 @@ tasks:
         --execution-environment gen2
         --service-account {{.SERVICE_ACCOUNT}}
         --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
-      - echo "Setting up IAM policies..."
 
   help:
     desc: Show list of available tasks and their descriptions

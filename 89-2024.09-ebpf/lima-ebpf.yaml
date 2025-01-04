@@ -9,31 +9,73 @@ images:
 
 cpus: 4
 memory: "8GiB"
+
 mounts:
   - location: "~"
     writable: true
   - location: "/tmp/lima"
     writable: true
 
+dns:
+  - 8.8.8.8
+  - 8.8.4.4
+
 provision:
-  - mode: system
-    script: |
-      apt-get update
-      apt-get install -y \
-        clang \
-        llvm \
-        libelf-dev \
-        linux-headers-generic \
-        linux-tools-generic \
-        gcc \
-        make \
-        git \
-        bpftool \
-        docker.io
-      systemctl enable docker
-      systemctl start docker
-      usermod -aG docker $LIMA_CIDATA_USER
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+
+    # System packages
+    apt-get update
+    apt-get install -y \
+      apt-transport-https \
+      ca-certificates \
+      curl \
+      clang \
+      llvm \
+      jq \
+      libelf-dev \
+      libpcap-dev \
+      libbfd-dev \
+      binutils-dev \
+      build-essential \
+      make \
+      linux-tools-common \
+      linux-tools-$(uname -r) \
+      bpfcc-tools
+
+    # Install Docker
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Install Task
+    #mv ./bin/task /usr/local/bin/task
+    #chmod +x /usr/local/bin/task
+    curl -sL https://taskfile.dev/install.sh | sh
+    install -m 0755 ./bin/task /usr/local/bin/task
+    rm -rf ./bin
+
+    # Configure Docker buildx
+    docker buildx install
+    docker buildx create --use
+
+    # Ensure docker can be used without sudo by lima user
+    usermod -aG docker lima
 
 containerd:
   system: true
   user: false
+
+portForwards:
+  - guestSocket: "/var/run/docker.sock"
+    hostSocket: "{{.Dir}}/docker.sock"
