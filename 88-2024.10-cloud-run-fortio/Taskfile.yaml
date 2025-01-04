@@ -141,12 +141,11 @@ tasks:
     desc: Deploy the cloudrun-info service with security configurations
     deps: [build-image, ensure-service-account]
     cmds:
-      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}} with security settings"
+      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
       - >
         gcloud run deploy {{.SERVICE_NAME}}
         --image {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
         --region {{.REGION}}
-        --platform managed
         --no-allow-unauthenticated
         --network {{.NETWORK}}
         --subnet {{.SUBNETWORK}}
@@ -171,7 +170,6 @@ tasks:
         gcloud run deploy fortio
         --image fortio/fortio
         --region {{.REGION}}
-        --platform managed
         --no-allow-unauthenticated
         --network {{.NETWORK}}
         --subnet {{.SUBNETWORK}}
