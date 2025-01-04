@@ -6,18 +6,31 @@ tasks:
     cmds:
       - limactl start --name ebpf-dev {{.TASKFILE_DIR}}/lima-ebpf.yaml --tty=false
 
-  build:
-    desc: "Build the Docker image for eBPF"
+  ensure-service-account:
+    desc: Ensure service account exists and has proper permissions
+    internal: true
+    status:
+      - gcloud iam service-accounts describe {{.SERVICE_ACCOUNT}} || exit 1
     cmds:
-      - echo "Building Docker image..."
-      - docker build -t ebpf-cloud-run:latest .
+      - echo "Setting up service account {{.SERVICE_ACCOUNT}}..."
+      - gcloud iam service-accounts create {{.SERVICE_NAME}} --display-name="Cloud Run experiment 89-2024.09-ebpf" || true
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="serviceAccount:{{.SERVICE_ACCOUNT}}"
+        --role="roles/run.invoker"
+      - >
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}}
+        --member="user:{{.USER_EMAIL}}"
+        --role="roles/iam.serviceAccountUser"
+        --condition=None
 
-  push:
+  build-push-image:
     desc: "Push the image to Google Container Registry (GCR)"
     vars:
       registry: "gcr.io"
       project_id: "{{.PROJECT_ID}}"
     cmds:
+      - docker build -t ebpf-cloud-run:latest .
       - echo "Tagging the image for GCR..."
       - docker tag ebpf-cloud-run {{.registry}}/{{.project_id}}/ebpf-cloud-run
       - echo "Pushing the image to GCR..."
@@ -26,25 +39,24 @@ tasks:
       PROJECT_ID:
         sh: echo "$PROJECT_ID"
 
-  deploy:
-    desc: "Deploy the eBPF Docker image to Cloud Run"
+  deploy-cloud-run:
+    desc: Deploy image to Cloud Run env
+    deps: [build-image, ensure-service-account]
     cmds:
-      - echo "Deploying the image to Cloud Run..."
-      - gcloud run deploy ebpf-demo \
-          --image gcr.io/{{.PROJECT_ID}}/ebpf-cloud-run \
-          --platform managed \
-          --region {{.REGION}} \
-          --allow-unauthenticated
-    env:
-      PROJECT_ID:
-        sh: echo "$PROJECT_ID"
-
-  all:
-    desc: "Run all tasks: build, test locally, push, and deploy"
-    cmds:
-      - task: build
-      - task: push
-      - task: deploy
+      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy {{.SERVICE_NAME}}
+        --image {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
+        --region {{.REGION}}
+        --no-allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --service-account {{.SERVICE_ACCOUNT}}
+        --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
+      - echo "Setting up IAM policies..."
 
   help:
     desc: Show list of available tasks and their descriptions

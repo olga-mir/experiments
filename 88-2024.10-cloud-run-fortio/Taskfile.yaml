@@ -113,7 +113,7 @@ tasks:
         --role="roles/iam.serviceAccountUser"
         --condition=None
 
-  build-image:
+  build-push-image:
     desc: Build and push Docker image to Artifact Registry
     dir: src
     sources:
@@ -139,7 +139,7 @@ tasks:
 
   deploy-info:
     desc: Deploy the cloudrun-info service with security configurations
-    deps: [build-image, ensure-service-account]
+    deps: [build-push-image, ensure-service-account]
     cmds:
       - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
       - >
