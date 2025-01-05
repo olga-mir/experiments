@@ -3,9 +3,15 @@ minimumLimaVersion: "1.0.0"
 # https://github.com/lima-vm/lima/blob/e41a769b31f20cec65d85b16b0d71b11fe8a7a13/templates/ubuntu-24.10.yaml
 # Latest and greatest as of last week of 2024
 images:
-- location: "https://cloud-images.ubuntu.com/releases/24.10/release-20241212/ubuntu-24.10-server-cloudimg-arm64.img"
-  arch: "aarch64"
-  digest: "sha256:fb39312ffd2b47b97eaef6ff197912eaa3e0a215eb3eecfbf2a24acd96ee1125"
+# - location: "https://cloud-images.ubuntu.com/releases/24.10/release-20241212/ubuntu-24.10-server-cloudimg-arm64.img"
+#  arch: "aarch64"
+#  digest: "sha256:fb39312ffd2b47b97eaef6ff197912eaa3e0a215eb3eecfbf2a24acd96ee1125"
+- location: "https://cloud-images.ubuntu.com/releases/24.10/release-20241212/ubuntu-24.10-server-cloudimg-amd64.img"
+  arch: "x86_64"
+  digest: "sha256:457f02ad36ef64f8f2cbfcc4855a0d401294d9b4727ae239e21c4104cca0bae2"
+
+arch: "x86_64"
+vmType: "qemu"
 
 cpus: 4
 memory: "8GiB"
@@ -66,8 +72,6 @@ provision:
     systemctl daemon-reload
 
     # Install Task
-    #mv ./bin/task /usr/local/bin/task
-    #chmod +x /usr/local/bin/task
     curl -sL https://taskfile.dev/install.sh | sh
     install -m 0755 ./bin/task /usr/local/bin/task
     rm -rf ./bin

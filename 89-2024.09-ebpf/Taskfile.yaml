@@ -1,6 +1,8 @@
 version: '3'
 
 vars:
+  SERVICE_NAME: experiment-ebpf
+  LIMA_INSTANCE_NAME: ebpf-dev
   PROJECT_ID:
     sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
   REGION:
@@ -9,7 +11,6 @@ vars:
     sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
   SUBNETWORK:
     sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
-  SERVICE_NAME: experiment-ebpf
   SERVICE_ACCOUNT:
     sh: echo "{{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
   ARTIFACT_REGISTRY: "{{.REGION}}-docker.pkg.dev"
@@ -28,21 +29,10 @@ tasks:
       - echo "SUBNETWORK={{.SUBNETWORK}}"
       - echo "All required variables are set!"
 
-  start-lima:
+  lima-start:
     desc: Start lima instance
     cmds:
-      - limactl start --name ebpf-dev {{.TASKFILE_DIR}}/lima-ebpf.yaml --tty=false
-
-  setup-lima:
-    desc: Set up lima instance with required tools
-    deps: [start-lima]
-    cmds:
-      - echo "Installing Task inside Lima instance..."
-      - limactl shell ebpf-dev sudo sh -c 'curl -sL https://taskfile.dev/install.sh | sh'
-      - limactl shell ebpf-dev sudo sh -c 'mv ./bin/task /usr/local/bin/task && chmod +x /usr/local/bin/task'
-      # shouldn't be necessary because local dir is already mounted
-      #- echo "Copying Taskfile to Lima instance..."
-      #- limactl copy {{.TASKFILE_DIR}}/Taskfile.yml ebpf-dev:/home/lima/Taskfile.yml
+      - limactl start --name {{.LIMA_INSTANCE_NAME}} {{.TASKFILE_DIR}}/lima-ebpf.yaml --tty=false
 
   ensure-artifact-registry:
     internal: true
@@ -76,14 +66,14 @@ tasks:
         --condition=None
 
   docker-auth:
-    desc: Configure Docker authentication for Artifact Registry. Run this from local, to avoid gcloud auth inside lima instance
+    desc: Configure Docker authentication for Artifact Registry.
     # while this can be done inside lima with some effort, it is just easier to do from local:
     # "gcloud": executable file not found in $PATH
     # Error: Cannot perform an interactive login from a non TTY device
     cmds:
-      - limactl shell ebpf-dev docker login -u oauth2accesstoken --password-stdin {{.ARTIFACT_REGISTRY}} <<< $(gcloud auth print-access-token)
+      - limactl shell {{.LIMA_INSTANCE_NAME}} docker login -u oauth2accesstoken --password-stdin {{.ARTIFACT_REGISTRY}} <<< $(gcloud auth print-access-token)
 
-  build-image-lima:
+  lima-build-image:
     desc: Build image inside Lima instance
     # deps: [docker-auth] # currently not setup to run gcloud from lima instance
     cmds:
@@ -111,6 +101,12 @@ tasks:
         --execution-environment gen2
         --service-account {{.SERVICE_ACCOUNT}}
         --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
+
+  lima-cleanup:
+    desc: Stop and remove lima instance
+    cmds:
+      - limactl stop {{.LIMA_INSTANCE_NAME}} || true
+      - limactl delete {{.LIMA_INSTANCE_NAME}} || true
 
   help:
     desc: Show list of available tasks and their descriptions

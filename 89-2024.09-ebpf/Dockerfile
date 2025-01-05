@@ -1,34 +1,32 @@
-FROM ubuntu:24.10 as builder
+FROM ubuntu:24.10 AS builder
 
-# Add build argument for kernel version
-ARG KERNEL_VERSION
-
-# Install build dependencies with specific kernel headers
+# Install minimal build dependencies
 RUN apt-get update && apt-get install -y \
     clang \
     llvm \
-    libelf-dev \
-    linux-headers-generic \
-    linux-tools-generic \
-    build-essential \
-    bpftool \
     && rm -rf /var/lib/apt/lists/*
 
+#    libelf-dev \
+#    build-essential \
+
 WORKDIR /app
+
+# Copy vmlinux.h - this should be generated in Lima and copied into Docker context
+#bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
+COPY vmlinux.h /app/vmlinux.h
 COPY hello.bpf.c .
 
-# Build the eBPF program with correct includes
+# Build the eBPF program using CO-RE
 RUN clang -O2 -g -target bpf \
-    -I/usr/include/$(uname -m)-linux-gnu \
-    -I/usr/include \
-    -I/usr/src/linux-headers-${KERNEL_VERSION}/include \
-    -I/usr/src/linux-headers-${KERNEL_VERSION}/arch/x86/include \
+    -D__TARGET_ARCH_x86 \
+    -I. \
     -c hello.bpf.c -o hello.bpf.o
 
 FROM ubuntu:24.10
 
+
 RUN apt-get update && apt-get install -y \
-    bpftool \
+    linux-tools-common \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -38,3 +36,4 @@ RUN echo '#!/bin/sh\nbpftool prog load hello.bpf.o /sys/fs/bpf/hello\ntail -f /s
     chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+
