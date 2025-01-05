@@ -1,6 +1,8 @@
 #include <linux/bpf.h>
 #include <linux/ptrace.h>
 #include <linux/types.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
 
 SEC("tracepoint/syscalls/sys_enter_execve")
 int hello_world(void *ctx) {
@@ -8,5 +10,4 @@ int hello_world(void *ctx) {
     return 0;
 }
 
-char _license[] SEC("license") = "GPL";
-
+char LICENSE[] SEC("license") = "GPL";

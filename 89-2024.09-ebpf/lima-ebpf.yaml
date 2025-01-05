@@ -49,6 +49,8 @@ provision:
       make \
       linux-tools-common \
       linux-tools-$(uname -r) \
+      linux-headers-generic \
+      linux-libc-dev \
       bpfcc-tools
 
     # Install Docker
@@ -82,6 +84,12 @@ provision:
 
     # Ensure docker can be used without sudo by lima user
     usermod -aG docker lima
+
+    # For docker login and push (otherwise can forward image to local. TODO)
+    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-455.0.0-linux-x86_64.tar.gz
+    tar -xf google-cloud-cli-455.0.0-linux-x86_64.tar.gz
+    ./google-cloud-sdk/install.sh
+
 
 containerd:
   system: true

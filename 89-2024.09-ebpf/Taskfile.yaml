@@ -3,6 +3,8 @@ version: '3'
 vars:
   SERVICE_NAME: experiment-ebpf
   LIMA_INSTANCE_NAME: ebpf-dev
+  REGISTRY_REPO: "{{.SERVICE_NAME}}"
+
   PROJECT_ID:
     sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
   REGION:
@@ -13,10 +15,11 @@ vars:
     sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
   SERVICE_ACCOUNT:
     sh: echo "{{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
-  ARTIFACT_REGISTRY: "{{.REGION}}-docker.pkg.dev"
-  IMAGE_PATH: "{{.ARTIFACT_REGISTRY}}/{{.PROJECT_ID}}/{{.SERVICE_NAME}}"
   GIT_COMMIT:
     sh: git rev-parse --short HEAD
+
+  ARTIFACT_REGISTRY: "{{.REGION}}-docker.pkg.dev"
+  IMAGE_PATH: "{{.ARTIFACT_REGISTRY}}/{{.PROJECT_ID}}/{{.REGISTRY_REPO}}/{{.SERVICE_NAME}}"
 
 tasks:
   validate-env:
@@ -65,6 +68,24 @@ tasks:
         --role="roles/iam.serviceAccountUser"
         --condition=None
 
+  deploy-cloud-run:
+    desc: Deploy image to Cloud Run env
+    deps: [validate-env, ensure-service-account]
+    cmds:
+      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy {{.SERVICE_NAME}}
+        --image {{.IMAGE_PATH}}:latest
+        --region {{.REGION}}
+        --no-allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --service-account {{.SERVICE_ACCOUNT}}
+        --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
+
   docker-auth:
     desc: Configure Docker authentication for Artifact Registry.
     # while this can be done inside lima with some effort, it is just easier to do from local:
@@ -76,31 +97,15 @@ tasks:
   lima-build-image:
     desc: Build image inside Lima instance
     # deps: [docker-auth] # currently not setup to run gcloud from lima instance
+    vars:
+      FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:
       - >
         docker buildx build -f Dockerfile
-        -t {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
+        -t {{.FULL_IMAGE_TAG}}
         -t {{.IMAGE_PATH}}:latest
         --platform linux/amd64
         --push .
-
-  deploy-cloud-run:
-    desc: Deploy image to Cloud Run env
-    deps: [validate-env, ensure-service-account]
-    cmds:
-      - echo "Deploying {{.SERVICE_NAME}} to Cloud Run in {{.REGION}}"
-      - >
-        gcloud run deploy {{.SERVICE_NAME}}
-        --image {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
-        --region {{.REGION}}
-        --no-allow-unauthenticated
-        --network {{.NETWORK}}
-        --subnet {{.SUBNETWORK}}
-        --ingress internal
-        --vpc-egress all-traffic
-        --execution-environment gen2
-        --service-account {{.SERVICE_ACCOUNT}}
-        --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
 
   lima-cleanup:
     desc: Stop and remove lima instance

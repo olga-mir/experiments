@@ -2,6 +2,18 @@
 
 Tinkering with eBPF (which is not acronym anymore and not a packet filtering) in cloud.
 
+# Building image
+
+```terminal
+task lima-start
+```
+
+get shell into provisioned instance and run build:
+
+```terminal
+task lima-build-push
+```
+
 # GKE
 
 WIP
