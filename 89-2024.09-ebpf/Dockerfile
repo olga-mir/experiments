@@ -23,7 +23,14 @@ RUN clang -O2 -g -target bpf \
 
 FROM ubuntu:24.10
 
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    linux-tools-6.4.10-* \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=builder /app/hello.bpf.o .
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
-CMD ["sleep", "infinity"]  # Replace with your actual command
+ENTRYPOINT ["./entrypoint.sh"]
