@@ -16,9 +16,9 @@ mounts:
   - location: "/tmp/lima"
     writable: true
 
-dns:
-  - 8.8.8.8
-  - 8.8.4.4
+hostResolver:
+  enabled: true
+  ipv6: false
 
 provision:
 - mode: system
@@ -46,6 +46,7 @@ provision:
       bpfcc-tools
 
     # Install Docker
+    groupadd docker || true
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
@@ -57,6 +58,12 @@ provision:
 
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    systemctl enable docker.socket
+    systemctl enable docker.service
+    systemctl start docker.socket
+    systemctl start docker.service
+    systemctl daemon-reload
 
     # Install Task
     #mv ./bin/task /usr/local/bin/task

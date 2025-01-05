@@ -85,9 +85,9 @@ tasks:
 
   build-image-lima:
     desc: Build image inside Lima instance
-    deps: [docker-auth]
+    # deps: [docker-auth] # currently not setup to run gcloud from lima instance
     cmds:
-      - |
+      - >
         docker buildx build -f Dockerfile
         -t {{.IMAGE_PATH}}:{{.GIT_COMMIT}}
         -t {{.IMAGE_PATH}}:latest
