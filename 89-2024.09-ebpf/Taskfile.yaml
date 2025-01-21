@@ -86,6 +86,13 @@ tasks:
         --service-account {{.SERVICE_ACCOUNT}}
         --set-env-vars=PROJECT_ID={{.PROJECT_ID}}
 
+  deploy-k8s:
+    desc: Deploy to Kubernetes
+    deps: [lima-build-image]
+    cmds:
+      - >
+        envsubst < k8s/ebpf-hello.yaml | kubectl apply -f -
+
   docker-auth:
     desc: Configure Docker authentication for Artifact Registry.
     # while this can be done inside lima with some effort, it is just easier to do from local:
@@ -94,9 +101,20 @@ tasks:
     cmds:
       - limactl shell {{.LIMA_INSTANCE_NAME}} docker login -u oauth2accesstoken --password-stdin {{.ARTIFACT_REGISTRY}} <<< $(gcloud auth print-access-token)
 
+  local-build-image:
+    desc: Build image locally
+    vars:
+      FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
+    cmds:
+      - >
+        docker buildx build -f Dockerfile
+        -t {{.FULL_IMAGE_TAG}}
+        -t {{.IMAGE_PATH}}:latest
+        --platform linux/amd64
+        --push .
+
   lima-build-image:
-    desc: Build image inside Lima instance
-    # deps: [docker-auth] # currently not setup to run gcloud from lima instance
+    desc: Build image inside Lima instance. `task docker-auth` must run on local before running this task inside Lima instance.
     vars:
       FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:

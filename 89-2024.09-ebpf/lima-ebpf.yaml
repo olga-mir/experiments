@@ -67,6 +67,16 @@ provision:
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+    #systemctl enable docker.socket
+    #systemctl enable docker.service
+    #systemctl start docker.socket
+    #systemctl start docker.service
+    #systemctl daemon-reload
+    ## TODO - even with these commands, docker is not running ootb inside lima instance.
+    ## need to run these commands manually
+
+    systemctl enable containerd.service
+    systemctl start containerd.service
     systemctl enable docker.socket
     systemctl enable docker.service
     systemctl start docker.socket
@@ -88,7 +98,15 @@ provision:
     # For docker login and push (otherwise can forward image to local. TODO)
     curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-455.0.0-linux-x86_64.tar.gz
     tar -xf google-cloud-cli-455.0.0-linux-x86_64.tar.gz
-    ./google-cloud-sdk/install.sh
+    ./google-cloud-sdk/install.sh --quiet --install-dir=/usr/local
+    echo "export PATH=/usr/local/google-cloud-sdk/bin:${PATH}" > /etc/profile.d/gcloud.sh
+    chmod +x /etc/profile.d/gcloud.sh
+
+    which task
+    which docker
+    which gcloud
+
+    systemctl status docker || true
 
 
 containerd:

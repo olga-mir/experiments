@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ebpf-hello
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ebpf-hello
+  template:
+    metadata:
+      labels:
+        app: ebpf-hello
+    spec:
+      hostPID: true  # Required to access host syscalls
+      containers:
+      - name: ebpf-hello
+        image: ${IMAGE_PATH}:${GIT_COMMIT}
+        securityContext:
+          privileged: true  # Required for eBPF operations
+        volumeMounts:
+        - name: sys-kernel-debug
+          mountPath: /sys/kernel/debug
+      volumes:
+      - name: sys-kernel-debug
+        hostPath:
+          path: /sys/kernel/debug

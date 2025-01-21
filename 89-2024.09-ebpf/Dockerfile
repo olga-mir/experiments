@@ -1,36 +1,34 @@
-FROM ubuntu:24.10 AS builder
+FROM golang:1.23 AS builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     clang \
     llvm \
-    linux-headers-generic \
+    linux-headers-amd64 \
     linux-libc-dev \
     libbpf-dev \
+    gcc-multilib \
     && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for asm/types.h
+RUN ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
 
 WORKDIR /app
 
-COPY vmlinux.h /app/vmlinux.h
-COPY hello.bpf.c .
+COPY go.* ./
+COPY *.go ./
+COPY hello.bpf.c ./
 
-RUN clang -O2 -g -target bpf \
-    -D__TARGET_ARCH_x86 \
-    -I. \
-    -I/usr/include/x86_64-linux-gnu \
-    -I/usr/include/bpf \
-    -c hello.bpf.c -o hello.bpf.o
+# Download dependencies and generate eBPF code
+RUN go mod download && \
+    go generate ./...
 
-FROM ubuntu:24.10
+# Build the Go binary
+RUN go build -o loader
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    linux-tools-6.4.10-* \
-    && rm -rf /var/lib/apt/lists/*
+FROM debian:bookworm-slim
 
 WORKDIR /app
-COPY --from=builder /app/hello.bpf.o .
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+COPY --from=builder /app/loader .
 
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["/app/loader"]

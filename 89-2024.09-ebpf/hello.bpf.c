@@ -6,7 +6,7 @@
 
 SEC("tracepoint/syscalls/sys_enter_execve")
 int hello_world(void *ctx) {
-    bpf_printk("Hello, eBPF World from Cloud Run!\n");
+    bpf_printk("Hello, eBPF World\n");
     return 0;
 }
 
