@@ -15,18 +15,22 @@ RUN ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
 
 WORKDIR /app
 
+COPY bpf/* ./bpf/
 COPY go.* ./
 COPY *.go ./
-COPY hello.bpf.c ./
 
-# Download dependencies and generate eBPF code
+# First install bpf2go tool
+RUN go install github.com/cilium/ebpf/cmd/bpf2go@latest
+
+# Download dependencies and generate eBPF code with verbose output
 RUN go mod download && \
-    go generate ./...
+    go generate -v ./... && \
+    ls -la && \
+    find . -name "*.go"
 
-# Build the Go binary
-RUN go build -o loader
+RUN CGO_ENABLED=0 go build -o loader
 
-FROM debian:bookworm-slim
+FROM ubuntu:24.10
 
 WORKDIR /app
 COPY --from=builder /app/loader .

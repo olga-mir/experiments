@@ -1,7 +1,6 @@
 minimumLimaVersion: "1.0.0"
 
 # https://github.com/lima-vm/lima/blob/e41a769b31f20cec65d85b16b0d71b11fe8a7a13/templates/ubuntu-24.10.yaml
-# Latest and greatest as of last week of 2024
 images:
 # - location: "https://cloud-images.ubuntu.com/releases/24.10/release-20241212/ubuntu-24.10-server-cloudimg-arm64.img"
 #  arch: "aarch64"
@@ -36,11 +35,8 @@ provision:
     apt-get update
     apt-get install -y \
       apt-transport-https \
-      ca-certificates \
-      curl \
       clang \
       llvm \
-      jq \
       libelf-dev \
       libpcap-dev \
       libbfd-dev \
@@ -53,66 +49,29 @@ provision:
       linux-libc-dev \
       bpfcc-tools
 
-    # Install Docker
-    groupadd docker || true
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    chmod a+r /etc/apt/keyrings/docker.asc
-
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-      tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-    apt-get update
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    #systemctl enable docker.socket
-    #systemctl enable docker.service
-    #systemctl start docker.socket
-    #systemctl start docker.service
-    #systemctl daemon-reload
-    ## TODO - even with these commands, docker is not running ootb inside lima instance.
-    ## need to run these commands manually
-
-    systemctl enable containerd.service
-    systemctl start containerd.service
-    systemctl enable docker.socket
-    systemctl enable docker.service
-    systemctl start docker.socket
-    systemctl start docker.service
-    systemctl daemon-reload
-
-    # Install Task
-    curl -sL https://taskfile.dev/install.sh | sh
-    install -m 0755 ./bin/task /usr/local/bin/task
-    rm -rf ./bin
-
-    # Configure Docker buildx
-    docker buildx install
-    docker buildx create --use
-
-    # Ensure docker can be used without sudo by lima user
-    usermod -aG docker lima
-
-    # For docker login and push (otherwise can forward image to local. TODO)
-    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-455.0.0-linux-x86_64.tar.gz
-    tar -xf google-cloud-cli-455.0.0-linux-x86_64.tar.gz
-    ./google-cloud-sdk/install.sh --quiet --install-dir=/usr/local
-    echo "export PATH=/usr/local/google-cloud-sdk/bin:${PATH}" > /etc/profile.d/gcloud.sh
-    chmod +x /etc/profile.d/gcloud.sh
-
-    which task
-    which docker
-    which gcloud
-
-    systemctl status docker || true
-
+# TODO - test if this works
+# - mode: system
+#   script: |
+#     #!/bin/bash
+#     set -eux -o pipefail
+#     command -v docker >/dev/null 2>&1 && exit 0
+#     export DEBIAN_FRONTEND=noninteractive
+#     curl -fsSL https://get.docker.com | sh
+#     systemctl disable --now docker
+#     apt-get install -y uidmap dbus-user-session
 
 containerd:
-  system: true
+  system: false
+  # TODO - `false` was not tested, but with `true` there are conflicts when installing docker
+  #system: true
   user: false
 
 portForwards:
   - guestSocket: "/var/run/docker.sock"
     hostSocket: "{{.Dir}}/docker.sock"
+
+# TODO - this may eliminate the need to run gcloud to push the image from inside the lima
+# while it works, it is more cumbersome and in current setup auth config is not great.
+# docker:
+#   socketPath: /var/run/docker.sock
+

@@ -7,17 +7,15 @@ import (
 	"syscall"
 
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpf hello hello.bpf.c -- -I. -I/usr/include/bpf
+//go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" bpf bpf/noisy-neighbour.bpf.c -- -I/usr/include/bpf -I/usr/include
 
 func main() {
 	// Allow the current process to lock memory for eBPF resources
-	if err := os.Setrlimit(syscall.RLIMIT_MEMLOCK, &syscall.Rlimit{
-		Current: syscall.RLIM_INFINITY,
-		Max:     syscall.RLIM_INFINITY,
-	}); err != nil {
-		log.Fatalf("Failed to set rlimit: %v", err)
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("Failed to remove rlimit: %v", err)
 	}
 
 	// Load pre-compiled programs into the kernel
@@ -28,7 +26,7 @@ func main() {
 	defer objs.Close()
 
 	// Attach the program to the tracepoint
-	tp, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.HelloWorld)
+	tp, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.HelloWorld, nil)
 	if err != nil {
 		log.Fatalf("Failed to attach BPF program: %v", err)
 	}
