@@ -2,6 +2,17 @@
 
 Learning eBPF and the systems through eBPF lens at the same time.
 
+# Experiments
+
+## Hello World
+
+basic hello world, just to setup the pipeline and build enviroment. Understanding basic moving parts.
+
+## Noisy Neighbour
+
+Following this article: https://netflixtechblog.com/noisy-neighbor-detection-with-ebpf-64b1f4b3bbdd
+Learning more advanced eBPF programs and learning performance.
+
 # Setup and Prerequisites
 
 This project uses GKE cluster to deploy the eBPF programs to as a daemonset.
