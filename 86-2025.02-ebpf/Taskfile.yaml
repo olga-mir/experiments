@@ -76,6 +76,11 @@ tasks:
         --platform linux/amd64
         --push .
 
+  build-ebpf:
+    desc: Only build the source eBPF file with clang, run inside lima
+    cmds:
+      - clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -I./bpf -I/usr/include/x86_64-linux-gnu -I/usr/include/bpf -c ./bpf/noisy-neighbour.bpf.c -o ./bpf/noisy-neighbour.bpf.o
+
   lima-cleanup:
     desc: Stop and remove lima instance
     cmds:

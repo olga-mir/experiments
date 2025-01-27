@@ -31,7 +31,6 @@ provision:
     #!/bin/bash
     set -eux -o pipefail
 
-    # System packages
     apt-get update
     apt-get install -y \
       apt-transport-https \
@@ -40,14 +39,19 @@ provision:
       libelf-dev \
       libpcap-dev \
       libbfd-dev \
+      libbpf-dev \
       binutils-dev \
       build-essential \
       make \
       linux-tools-common \
       linux-tools-$(uname -r) \
       linux-headers-generic \
+      linux-headers-$(uname -r) \
       linux-libc-dev \
       bpfcc-tools
+
+    ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+    # OR sudo ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
 
 # TODO - test if this works
 # - mode: system

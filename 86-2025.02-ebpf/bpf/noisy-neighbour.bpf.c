@@ -1,18 +1,44 @@
-#include <linux/bpf.h>
-#include <linux/ptrace.h>
-#include <linux/types.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_core_read.h>
-#include <linux/types.h>
-#include <bpf/bpf_tracing.h>
 #include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+#include <bpf/bpf_core_read.h>
 
-// https://netflixtechblog.com/noisy-neighbor-detection-with-ebpf-64b1f4b3bbdd
+/// ###### Implementation idea and explanation:
+/// https://netflixtechblog.com/noisy-neighbor-detection-with-ebpf-64b1f4b3bbdd
 
-#define MAX_TASK_ENTRIES 10240
 
-typedef u32 __u32
-typedef u64 __u64
+#define MAX_TASK_ENTRIES 20000
+#define RINGBUF_SIZE_BYTES 16384
+#define RATE_LIMIT_NS 1000
+
+typedef __u32 u32;
+typedef __u64 u64;
+
+void bpf_rcu_read_lock(void) __ksym;
+void bpf_rcu_read_unlock(void) __ksym;
+
+u64 get_task_cgroup_id(struct task_struct *task)
+{
+    struct css_set *cgroups;
+    u64 cgroup_id;
+    bpf_rcu_read_lock();
+    cgroups = task->cgroups;
+    cgroup_id = cgroups->dfl_cgrp->kn->id;
+    bpf_rcu_read_unlock();
+    return cgroup_id;
+}
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, RINGBUF_SIZE_BYTES);
+} events SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(max_entries, MAX_TASK_ENTRIES);
+    __uint(key_size, sizeof(u64));
+    __uint(value_size, sizeof(u64));
+} cgroup_id_to_last_event_ts SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -21,12 +47,21 @@ struct {
     __uint(value_size, sizeof(u64));
 } runq_enqueued SEC(".maps");
 
+struct runq_event {
+    u64 prev_cgroup_id;
+    u64 cgroup_id;
+    u64 runq_lat;
+    u64 ts;
+};
+
 SEC("tp_btf/sched_wakeup")
-int tp_sched_wakeup(u64 *ctx)
+int tp_sched_wakeup(void *ctx)
 {
-    struct task_struct *task = (void *)ctx[0];
-    u32 pid = task->pid;
-    u64 ts = bpf_ktime_get_ns();
+    struct task_struct *task;
+
+    task = (struct task_struct *)ctx;
+    __u32 pid = BPF_CORE_READ(task, pid);
+    __u64 ts = bpf_ktime_get_ns();
 
     bpf_map_update_elem(&runq_enqueued, &pid, &ts, BPF_NOEXIST);
     return 0;
@@ -37,8 +72,8 @@ int tp_sched_switch(__u64 *ctx)
 {
     struct task_struct *prev = (struct task_struct *)ctx[1];
     struct task_struct *next = (struct task_struct *)ctx[2];
-    u32 prev_pid = BPF_CORE_READ(prev->pid);
-    u32 next_pid = BPF_CORE_READ(next->pid);
+    u32 prev_pid = BPF_CORE_READ(prev, pid);
+    u32 next_pid = BPF_CORE_READ(next, pid);
 
     // fetch timestamp of when the next task was enqueued
     u64 *tsp = bpf_map_lookup_elem(&runq_enqueued, &next_pid);
@@ -55,6 +90,7 @@ int tp_sched_switch(__u64 *ctx)
 
     u64 prev_cgroup_id = get_task_cgroup_id(prev);
     u64 cgroup_id = get_task_cgroup_id(next);
+
 
     // per-cgroup-id-per-CPU rate-limiting
     // to balance observability with performance overhead
@@ -85,37 +121,3 @@ int tp_sched_switch(__u64 *ctx)
 
     return 0;
 }
-
-void bpf_rcu_read_lock(void) __ksym;
-void bpf_rcu_read_unlock(void) __ksym;
-
-u64 get_task_cgroup_id(struct task_struct *task)
-{
-    struct css_set *cgroups;
-    u64 cgroup_id;
-    bpf_rcu_read_lock();
-    cgroups = task->cgroups;
-    cgroup_id = cgroups->dfl_cgrp->kn->id;
-    bpf_rcu_read_unlock();
-    return cgroup_id;
-}
-
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, RINGBUF_SIZE_BYTES);
-} events SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __uint(max_entries, MAX_TASK_ENTRIES);
-    __uint(key_size, sizeof(u64));
-    __uint(value_size, sizeof(u64));
-} cgroup_id_to_last_event_ts SEC(".maps");
-
-struct runq_event {
-    u64 prev_cgroup_id;
-    u64 cgroup_id;
-    u64 runq_lat;
-    u64 ts;
-};
-
