@@ -17,14 +17,16 @@ typedef __u64 u64;
 void bpf_rcu_read_lock(void) __ksym;
 void bpf_rcu_read_unlock(void) __ksym;
 
-u64 get_task_cgroup_id(struct task_struct *task)
+static __u64 get_task_cgroup_id(struct task_struct *task)
 {
     struct css_set *cgroups;
-    u64 cgroup_id;
+    __u64 cgroup_id;
+
     bpf_rcu_read_lock();
-    cgroups = task->cgroups;
-    cgroup_id = cgroups->dfl_cgrp->kn->id;
+    cgroups = BPF_CORE_READ(task, cgroups);
+    cgroup_id = BPF_CORE_READ(cgroups, dfl_cgrp, kn, id);
     bpf_rcu_read_unlock();
+
     return cgroup_id;
 }
 
@@ -72,7 +74,7 @@ int tp_sched_switch(__u64 *ctx)
 {
     struct task_struct *prev = (struct task_struct *)ctx[1];
     struct task_struct *next = (struct task_struct *)ctx[2];
-    u32 prev_pid = BPF_CORE_READ(prev, pid);
+    // u32 prev_pid = BPF_CORE_READ(prev, pid);
     u32 next_pid = BPF_CORE_READ(next, pid);
 
     // fetch timestamp of when the next task was enqueued
