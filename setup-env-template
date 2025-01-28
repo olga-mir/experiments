@@ -1,0 +1,9 @@
+
+# Common
+export PROJECT_ID=
+export REGION=
+export NETWORK=
+export SUBNETWORK=
+
+# Specific projects
+export USER_EMAIL=
