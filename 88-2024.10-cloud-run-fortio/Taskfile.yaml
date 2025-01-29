@@ -165,9 +165,10 @@ tasks:
     desc: Deploy Fortio load testing service
     deps: [ensure-fortio-service-account]
     cmds:
-      - echo "Deploying Fortio to Cloud Run in {{.REGION}}"
+      - echo "Deploying SRC Fortio to Cloud Run in {{.REGION}}"
       - >
         gcloud run deploy fortio
+        --project {{.PROJECT_ID}}
         --image fortio/fortio
         --region {{.REGION}}
         --no-allow-unauthenticated
@@ -179,9 +180,35 @@ tasks:
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
         gcloud run services add-iam-policy-binding fortio
+        --project {{.PROJECT_ID}}
         --region={{.REGION}}
         --member="user:{{.USER_EMAIL}}"
         --role="roles/run.invoker"
+
+  deploy-dest-fortio:
+    desc: Deploy Fortio load testing service
+    #deps: [ensure-fortio-service-account]
+    cmds:
+      - echo "Deploying DEST Fortio to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy dest-fortio
+        --project {{.PROJECT_ID}}
+        --image fortio/fortio
+        --region {{.REGION}}
+        --no-allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
+      - >
+        gcloud run services add-iam-policy-binding dest-fortio
+        --project {{.PROJECT_ID}}
+        --region={{.REGION}}
+        --member="user:{{.USER_EMAIL}}"
+        --role="roles/run.invoker"
+
 
   deploy-all:
     desc: Deploy all services (both info and fortio)

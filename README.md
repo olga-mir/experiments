@@ -19,7 +19,23 @@ Other general purpose folders:
 
 # Run
 
-Some fields are dynamic or private, they are templated out by env vars.
+## Environment Variables
+
+Scripts and files in this repo rely heavily on information provided via env vars. For GCP values file may look like this:
+
+```
+# Common
+export PROJECT_ID=
+export REGION=
+export NETWORK=
+export SUBNETWORK=
+
+# Specific projects
+# user mail is required for Cloud Run scenarios where invoker check is enabled
+export USER_EMAIL=
+```
+
+Some templates also use dynamic variables and envsubst to render a manifest that can be deployed.
 
 ```
 envsubst < alpine-targeted-node-tmpl.yaml > alpine-targeted-node-rendered.yaml
