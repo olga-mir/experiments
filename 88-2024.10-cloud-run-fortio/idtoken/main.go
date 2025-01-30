@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	audience := "https:....a.run.app/"
+	audience := os.Getenv("TARGET_CLOUD_RUN_SERVICE")
 
 	err := printAuthHeader(os.Stdout, audience)
 	if err != nil {

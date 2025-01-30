@@ -1,50 +1,16 @@
 version: '3'
 
 vars:
-  # Required environment variables validation
   PROJECT_ID:
-    sh: |
-      if [ -z "${PROJECT_ID}" ]; then
-        echo "ERROR: PROJECT_ID environment variable is not set" >&2
-        exit 1
-      fi
-      echo "${PROJECT_ID}"
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
   REGION:
-    sh: |
-      if [ -z "${REGION}" ]; then
-        echo "ERROR: REGION environment variable is not set" >&2
-        exit 1
-      fi
-      echo "${REGION}"
+    sh: echo "${REGION:?'REGION environment variable is required'}"
   NETWORK:
-    sh: |
-      if [ -z "${NETWORK}" ]; then
-        echo "ERROR: NETWORK environment variable is not set" >&2
-        exit 1
-      fi
-      if ! gcloud compute networks describe "${NETWORK}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
-        echo "ERROR: Network ${NETWORK} does not exist in project ${PROJECT_ID}" >&2
-        exit 1
-      fi
-      echo "${NETWORK}"
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
   SUBNETWORK:
-    sh: |
-      if [ -z "${SUBNETWORK}" ]; then
-        echo "ERROR: SUBNETWORK environment variable is not set" >&2
-        exit 1
-      fi
-      if ! gcloud compute networks subnets describe "${SUBNETWORK}" --project="${PROJECT_ID}" --region="${REGION}" >/dev/null 2>&1; then
-        echo "ERROR: Subnetwork ${SUBNETWORK} does not exist in project ${PROJECT_ID}, region ${REGION}" >&2
-        exit 1
-      fi
-      echo "${SUBNETWORK}"
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
   USER_EMAIL:
-    sh: |
-      if [ -z "${USER_EMAIL}" ]; then
-        echo "ERROR: USER_EMAIL environment variable is not set" >&2
-        exit 1
-      fi
-      echo "${USER_EMAIL}"
+    sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
 
   # Service configuration
   SERVICE_NAME: cloudrun-info
@@ -161,7 +127,7 @@ tasks:
         --member="user:{{.USER_EMAIL}}"
         --role="roles/run.invoker"
 
-  deploy-fortio:
+  deploy-src-fortio:
     desc: Deploy Fortio load testing service
     deps: [ensure-fortio-service-account]
     cmds:
@@ -177,6 +143,7 @@ tasks:
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
+        --tag src-fortio
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
         gcloud run services add-iam-policy-binding fortio
@@ -201,6 +168,7 @@ tasks:
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
+        --tag dest-fortio
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
         gcloud run services add-iam-policy-binding dest-fortio
@@ -209,12 +177,56 @@ tasks:
         --member="user:{{.USER_EMAIL}}"
         --role="roles/run.invoker"
 
-
-  deploy-all:
-    desc: Deploy all services (both info and fortio)
+  deploy-src-fortio-unauth:
+    desc: Deploy Fortio load testing service
+    deps: [ensure-fortio-service-account]
     cmds:
-      - task: deploy-info
-      - task: deploy-fortio
+      - echo "Deploying SRC Fortio to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy fortio
+        --project {{.PROJECT_ID}}
+        --image fortio/fortio
+        --region {{.REGION}}
+        --allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --tag src-fortio-unauthed
+        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
+
+  deploy-dest-fortio-unauth:
+    desc: Deploy Fortio load testing service
+    #deps: [ensure-fortio-service-account]
+    cmds:
+      - echo "Deploying DEST Fortio to Cloud Run in {{.REGION}}"
+      - >
+        gcloud run deploy dest-fortio
+        --project {{.PROJECT_ID}}
+        --image fortio/fortio
+        --region {{.REGION}}
+        --allow-unauthenticated
+        --network {{.NETWORK}}
+        --subnet {{.SUBNETWORK}}
+        --ingress internal
+        --vpc-egress all-traffic
+        --execution-environment gen2
+        --tag dest-fortio-unauthed
+        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
+
+  print-authed-load-test-request:
+    desc: Print command to run Fortio load test (set BASTION env var to the name of bastion VM)
+    cmds:
+      - >
+        - SOURCE_CLOUD_RUN_URL=$(gcloud run services describe src-fortio --region={{.REGION}} --format='value(status.url)')
+        - TARGET_CLOUD_RUN_URL=$(gcloud run services describe dest-fortio --region={{.REGION}} --format='value(status.url)')
+        - echo "GOOGLE_APPLICATION_CREDENTIALS must be set and contain a valid service account key"
+        - HEADER=$(cd idtoken && TARGET_CLOUD_RUN_SERVICE={{.TARGET_CLOUD_RUN_URL}} go run main.go) TARGET_URL="{{.TARGET_CLOUD_RUN_URL}}" envsubst < tests/request-metadata-cr-to-cr-invoker.tpl.json > rendered.json
+        - echo "copying rendered.json to the bastion host"
+        - gcloud compute scp rendered.json $BASTION_HOST:/tmp/rendered.json --zone= --tunnel-through-iap
+        - echo "Run this curl command on the bastion host (TOKEN should be set on the bastion host)"
+        - echo "curl -H \"Authorization: Bearer \$TOKEN\" --data @/tmp/rendered.json \"{{.SOURCE_CLOUD_RUN_URL}}/fortio/rest/run?jsonPath=.metadata\""
 
   get-auth-token:
     desc: Get authentication token for accessing the service
