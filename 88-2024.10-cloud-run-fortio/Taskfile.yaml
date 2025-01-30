@@ -143,10 +143,11 @@ tasks:
         --tag all-cloudruns
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
-        gcloud run services add-iam-policy-binding fortio
+        gcloud run services add-iam-policy-binding {{.SRC_FORTIO_SERVICE_NAME}}
         --project {{.PROJECT_ID}}
         --region={{.REGION}}
         --member="user:{{.USER_EMAIL}}"
+        --member="serviceAccount:{{.FORTIO_SERVICE_ACCOUNT}}"
         --role="roles/run.invoker"
 
   deploy-dest-fortio:
@@ -169,24 +170,26 @@ tasks:
         --tag all-cloudruns
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
-        gcloud run services add-iam-policy-binding dest-fortio
+        gcloud run services add-iam-policy-binding {{.DEST_FORTIO_SERVICE_NAME}}
         --project {{.PROJECT_ID}}
         --region={{.REGION}}
         --member="user:{{.USER_EMAIL}}"
+        --member="serviceAccount:{{.FORTIO_SERVICE_ACCOUNT}}"
         --role="roles/run.invoker"
 
   print-authed-load-test-request:
-    desc: Print command to run Fortio load test (set BASTION env var to the name of bastion VM)
+    desc: Print command to run Fortio load test (set BASTION env var to the name of bastion VM and GOOGLE_APPLICATION_CREDENTIALS is st nd point to valid credentials)
+    vars:
+      BASTION_HOST: "bastion-1738038985"
+      SOURCE_CLOUD_RUN_URL: $(gcloud run services describe {{.SRC_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
+      TARGET_CLOUD_RUN_URL: $(gcloud run services describe {{.DEST_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
     cmds:
-      - >
-        - SOURCE_CLOUD_RUN_URL=$(gcloud run services describe src-fortio --region={{.REGION}} --format='value(status.url)')
-        - TARGET_CLOUD_RUN_URL=$(gcloud run services describe dest-fortio --region={{.REGION}} --format='value(status.url)')
-        - echo "GOOGLE_APPLICATION_CREDENTIALS must be set and contain a valid service account key"
-        - HEADER=$(cd idtoken && TARGET_CLOUD_RUN_SERVICE={{.TARGET_CLOUD_RUN_URL}} go run main.go) TARGET_URL="{{.TARGET_CLOUD_RUN_URL}}" envsubst < tests/request-metadata-cr-to-cr-invoker.tpl.json > rendered.json
-        - echo "copying rendered.json to the bastion host"
-        - gcloud compute scp rendered.json $BASTION_HOST:/tmp/rendered.json --zone= --tunnel-through-iap
-        - echo "Run this curl command on the bastion host (TOKEN should be set on the bastion host)"
-        - echo "curl -H \"Authorization: Bearer \$TOKEN\" --data @/tmp/rendered.json \"{{.SOURCE_CLOUD_RUN_URL}}/fortio/rest/run?jsonPath=.metadata\""
+      - HEADER=$(cd idtoken && TARGET_CLOUD_RUN_SERVICE={{.TARGET_CLOUD_RUN_URL}} go run main.go) TARGET_URL={{.TARGET_CLOUD_RUN_URL}} envsubst < tests/request-metadata-cr-to-cr-invoker.tpl.json > rendered.json
+      - echo "copying rendered.json to the bastion host"
+      - gcloud compute scp rendered.json {{.BASTION_HOST}}:/tmp/rendered.json --zone=australia-southeast1-b --tunnel-through-iap
+      - echo "Run this curl command on the bastion host (TOKEN should be set on the bastion host)"
+      - |
+        echo "curl -H \"Authorization: Bearer \$TOKEN\" --data @/tmp/rendered.json \"{{.SOURCE_CLOUD_RUN_URL}}/fortio/rest/run?jsonPath=.metadata\""
 
   get-auth-token:
     desc: Get authentication token for accessing the service
