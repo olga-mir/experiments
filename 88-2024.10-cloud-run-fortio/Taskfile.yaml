@@ -16,6 +16,8 @@ vars:
   SERVICE_NAME: cloudrun-info
   SERVICE_ACCOUNT: '{{.SERVICE_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com'
   FORTIO_SERVICE_ACCOUNT: 'fortio@{{.PROJECT_ID}}.iam.gserviceaccount.com'
+  SRC_FORTIO_SERVICE_NAME: src-fortio
+  DEST_FORTIO_SERVICE_NAME: dest-fortio
 
   # Artifact Registry configuration
   REGISTRY_REPO: cloud-run-apps
@@ -29,12 +31,6 @@ vars:
   LDFLAGS: '-X main.buildTime={{.BUILD_TIME}} -X main.gitCommit={{.GIT_COMMIT}}'
 
 tasks:
-  test:
-    desc: Run basic tests
-    dir: tests
-    cmds:
-      - ./basic.sh
-
   ensure-service-account:
     desc: Ensure service account exists and has proper permissions
     internal: true
@@ -129,11 +125,11 @@ tasks:
 
   deploy-src-fortio:
     desc: Deploy Fortio load testing service
-    deps: [ensure-fortio-service-account]
+    #deps: [ensure-fortio-service-account]
     cmds:
       - echo "Deploying SRC Fortio to Cloud Run in {{.REGION}}"
       - >
-        gcloud run deploy fortio
+        gcloud run deploy {{.SRC_FORTIO_SERVICE_NAME}}
         --project {{.PROJECT_ID}}
         --image fortio/fortio
         --region {{.REGION}}
@@ -143,7 +139,8 @@ tasks:
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
-        --tag src-fortio
+        --tag {{.SRC_FORTIO_SERVICE_NAME}}
+        --tag all-cloudruns
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
         gcloud run services add-iam-policy-binding fortio
@@ -158,7 +155,7 @@ tasks:
     cmds:
       - echo "Deploying DEST Fortio to Cloud Run in {{.REGION}}"
       - >
-        gcloud run deploy dest-fortio
+        gcloud run deploy {{.DEST_FORTIO_SERVICE_NAME}}
         --project {{.PROJECT_ID}}
         --image fortio/fortio
         --region {{.REGION}}
@@ -168,7 +165,8 @@ tasks:
         --ingress internal
         --vpc-egress all-traffic
         --execution-environment gen2
-        --tag dest-fortio
+        --tag {{.DEST_FORTIO_SERVICE_NAME}}
+        --tag all-cloudruns
         --service-account {{.FORTIO_SERVICE_ACCOUNT}}
       - >
         gcloud run services add-iam-policy-binding dest-fortio
@@ -176,44 +174,6 @@ tasks:
         --region={{.REGION}}
         --member="user:{{.USER_EMAIL}}"
         --role="roles/run.invoker"
-
-  deploy-src-fortio-unauth:
-    desc: Deploy Fortio load testing service
-    deps: [ensure-fortio-service-account]
-    cmds:
-      - echo "Deploying SRC Fortio to Cloud Run in {{.REGION}}"
-      - >
-        gcloud run deploy fortio
-        --project {{.PROJECT_ID}}
-        --image fortio/fortio
-        --region {{.REGION}}
-        --allow-unauthenticated
-        --network {{.NETWORK}}
-        --subnet {{.SUBNETWORK}}
-        --ingress internal
-        --vpc-egress all-traffic
-        --execution-environment gen2
-        --tag src-fortio-unauthed
-        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
-
-  deploy-dest-fortio-unauth:
-    desc: Deploy Fortio load testing service
-    #deps: [ensure-fortio-service-account]
-    cmds:
-      - echo "Deploying DEST Fortio to Cloud Run in {{.REGION}}"
-      - >
-        gcloud run deploy dest-fortio
-        --project {{.PROJECT_ID}}
-        --image fortio/fortio
-        --region {{.REGION}}
-        --allow-unauthenticated
-        --network {{.NETWORK}}
-        --subnet {{.SUBNETWORK}}
-        --ingress internal
-        --vpc-egress all-traffic
-        --execution-environment gen2
-        --tag dest-fortio-unauthed
-        --service-account {{.FORTIO_SERVICE_ACCOUNT}}
 
   print-authed-load-test-request:
     desc: Print command to run Fortio load test (set BASTION env var to the name of bastion VM)
