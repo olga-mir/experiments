@@ -123,3 +123,5 @@ int tp_sched_switch(__u64 *ctx)
 
     return 0;
 }
+
+char LICENSE[] SEC("license") = "GPL";

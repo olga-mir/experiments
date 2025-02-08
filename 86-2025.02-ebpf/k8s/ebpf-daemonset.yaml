@@ -1,20 +1,29 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-ebpf
+spec:
+  finalizers:
+  - kubernetes
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: ebpf-hello
-  namespace: default
+  name: my-ebpf
+  namespace: test-ebpf
 spec:
   selector:
     matchLabels:
-      app: ebpf-hello
+      app: my-ebpf
   template:
     metadata:
       labels:
-        app: ebpf-hello
+        app: my-ebpf
     spec:
       hostPID: true  # Required to access host syscalls
       containers:
-      - name: ebpf-hello
+      - name: my-ebpf
         image: ${IMAGE_PATH}:${GIT_COMMIT}
         securityContext:
           privileged: true  # Required for eBPF operations
