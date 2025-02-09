@@ -40,9 +40,12 @@ tasks:
   deploy-k8s:
     desc: Deploy to Kubernetes
     # deps: [lima-build-image] # TODO - avoid rebuild
+    vars:
+      FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:latest'
+      #FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:{{.GIT_COMMIT}}'
     cmds:
       - >
-        IMAGE_PATH={{.IMAGE_PATH}} GIT_COMMIT={{.GIT_COMMIT}} envsubst < k8s/ebpf-daemonset.yaml | kubectl apply -f -
+        IMAGE={{.FULL_IMAGE_TAG}} envsubst < k8s/ebpf-daemonset.yaml | kubectl apply -f -
 
   docker-auth:
     desc: Configure Docker authentication for Artifact Registry.
