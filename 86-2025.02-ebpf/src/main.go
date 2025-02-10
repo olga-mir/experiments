@@ -45,6 +45,12 @@ func main() {
 	log.Println("Successfully loaded and attached BPF program")
 	log.Println("sudo cat /sys/kernel/debug/tracing/trace_pipe")
 
+	// Initialize metrics exporter
+	metricsExporter, err := NewMetricsExporter()
+	if err != nil {
+		log.Fatalf("Failed to create metrics exporter: %v", err)
+	}
+
 	// Wait for a signal to cleanup
 	stopper := make(chan os.Signal, 1)
 	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)

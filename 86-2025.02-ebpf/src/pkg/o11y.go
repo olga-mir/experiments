@@ -1,15 +1,18 @@
-package observability
+package metrics
 
 import (
 	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,10 +37,12 @@ type GKEMetadata struct {
 	nodeName    string
 }
 
-type MetricsExporter struct {
-	client      *monitoring.MetricClient
-	projectPath string
-	metadata    *GKEMetadata
+// Types matching the eBPF program
+type runq_event struct {
+	PrevCgroupID uint64 `align:"prev_cgroup_id"`
+	CgroupID     uint64 `align:"cgroup_id"`
+	RunqLat      uint64 `align:"runq_lat"`
+	Ts           uint64 `align:"ts"`
 }
 
 // getMetadataValue retrieves value from GCE metadata server
@@ -59,7 +64,7 @@ func getMetadataValue(path string) (string, error) {
 		return "", fmt.Errorf("metadata server returned status %d", resp.StatusCode)
 	}
 
-	value, err := io.ReadAll(resp.Body)
+	value, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -135,11 +140,12 @@ func (m *MetricsExporter) createTimeSeriesLatency(event *runq_event, containerIn
 			Resource: &monitoredres.MonitoredResource{
 				Type: "k8s_container",
 				Labels: map[string]string{
-					"container_name": containerName,
-					"location":       "",
-					"cluster_name":   "",
-					"namespace_name": "",
-					"pod_name":       "",
+					"container_name": containerInfo.Name,
+					"location":       m.metadata.location,
+					"cluster_name":   m.metadata.clusterName,
+					"namespace_name": containerInfo.Namespace,
+					"pod_name":       containerInfo.PodName,
+					"node_name":      m.metadata.nodeName,
 				},
 			},
 			Points: []*monitoringpb.Point{{
@@ -150,7 +156,7 @@ func (m *MetricsExporter) createTimeSeriesLatency(event *runq_event, containerIn
 				},
 				Value: &monitoringpb.TypedValue{
 					Value: &monitoringpb.TypedValue_DoubleValue{
-						DoubleValue: float64(event.runq_lat) / 1000000.0, // Convert to milliseconds
+						DoubleValue: float64(event.RunqLat) / 1000000.0, // Convert to milliseconds
 					},
 				},
 			}},
@@ -161,7 +167,7 @@ func (m *MetricsExporter) createTimeSeriesLatency(event *runq_event, containerIn
 	return m.client.CreateTimeSeries(ctx, req)
 }
 
-func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containerName, preemptionType string) error {
+func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containerInfo *ContainerInfo, preemptionType string) error {
 	now := time.Now()
 	req := &monitoringpb.CreateTimeSeriesRequest{
 		Name: m.projectPath,
@@ -169,18 +175,21 @@ func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containe
 			Metric: &metricpb.Metric{
 				Type: fmt.Sprintf("%s/sched/switch/out", metricPrefix),
 				Labels: map[string]string{
-					"container":       containerName,
+					"container":       containerInfo.Name,
+					"pod":             containerInfo.PodName,
+					"namespace":       containerInfo.Namespace,
 					"preemption_type": preemptionType,
 				},
 			},
 			Resource: &monitoredres.MonitoredResource{
 				Type: "k8s_container",
 				Labels: map[string]string{
-					"container_name": containerName,
-					"location":       "your-cluster-location",
-					"cluster_name":   "your-cluster-name",
-					"namespace_name": "your-namespace",
-					"pod_name":       "your-pod-name",
+					"container_name": containerInfo.Name,
+					"location":       m.metadata.location,
+					"cluster_name":   m.metadata.clusterName,
+					"namespace_name": containerInfo.Namespace,
+					"pod_name":       containerInfo.PodName,
+					"node_name":      m.metadata.nodeName,
 				},
 			},
 			Points: []*monitoringpb.Point{{
@@ -203,18 +212,6 @@ func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containe
 }
 
 func main() {
-	// Initialize container runtime
-	containerRuntime, err := NewContainerRuntime()
-	if err != nil {
-		log.Fatalf("Failed to initialize container runtime: %v", err)
-	}
-	defer containerRuntime.client.Close()
-	// Initialize metrics exporter
-	metricsExporter, err := NewMetricsExporter()
-	if err != nil {
-		log.Fatalf("Failed to create metrics exporter: %v", err)
-	}
-
 	// Load and attach eBPF program (your existing code here)
 	// ...
 
@@ -277,105 +274,129 @@ func determinePreemptionType(prevCgroupID, newCgroupID uint64) string {
 	return "other_container"
 }
 
-type ContainerInfo struct {
-	ID         string
-	Name       string
-	PodName    string
-	Namespace  string
-	CgroupPath string
+type MetricsExporter struct {
+	client      *monitoring.MetricClient
+	projectPath string
+	metadata    *GKEMetadata
 }
 
-type ContainerRuntime struct {
-	client      *containerd.Client
+// BPF collection related types
+type bpfEvents struct {
+	events *ringbuf.Reader
+}
+
+type ContainerInfo struct {
+	Name      string
+	PodName   string
+	Namespace string
+	CgroupID  uint64
+}
+
+type ContainerResolver struct {
+	// Cache of cgroup ID to container info
 	cgroupCache sync.Map
 }
 
-func NewContainerRuntime() (*ContainerRuntime, error) {
-	client, err := containerd.New("/run/containerd/containerd.sock")
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to containerd: %v", err)
-	}
-
-	return &ContainerRuntime{
-		client: client,
-	}, nil
+func NewContainerResolver() *ContainerResolver {
+	return &ContainerResolver{}
 }
 
-func (cr *ContainerRuntime) getCgroupID(cgroupPath string) (uint64, error) {
-	f, err := os.Open(filepath.Join("/sys/fs/cgroup", cgroupPath, "cgroup.id"))
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	var id uint64
-	_, err = fmt.Fscanf(f, "%d", &id)
-	return id, err
-}
-
-func (cr *ContainerRuntime) updateContainerCache(ctx context.Context) error {
-	containers, err := cr.client.Containers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list containers: %v", err)
-	}
-
-	for _, container := range containers {
-		info, err := container.Info(ctx)
-		if err != nil {
-			continue
-		}
-
-		// Get container labels
-		labels := info.Labels
-		podName := labels["io.kubernetes.pod.name"]
-		namespace := labels["io.kubernetes.pod.namespace"]
-		containerName := labels["io.kubernetes.container.name"]
-
-		// Get cgroup path and ID
-		task, err := container.Task(ctx, nil)
-		if err != nil {
-			continue
-		}
-
-		cgroupPath, err := task.Cgroup()
-		if err != nil {
-			continue
-		}
-
-		cgroupID, err := cr.getCgroupID(cgroupPath)
-		if err != nil {
-			continue
-		}
-
-		containerInfo := &ContainerInfo{
-			ID:         container.ID(),
-			Name:       containerName,
-			PodName:    podName,
-			Namespace:  namespace,
-			CgroupPath: cgroupPath,
-		}
-
-		cr.cgroupCache.Store(cgroupID, containerInfo)
-	}
-
-	return nil
-}
-
-func (cr *ContainerRuntime) GetContainerInfo(cgroupID uint64) (*ContainerInfo, error) {
-	// Try to get from cache first
+func (cr *ContainerResolver) GetContainerInfo(cgroupID uint64) (*ContainerInfo, error) {
+	// Try cache first
 	if info, ok := cr.cgroupCache.Load(cgroupID); ok {
 		return info.(*ContainerInfo), nil
 	}
 
-	// Update cache and try again
-	ctx := context.Background()
-	if err := cr.updateContainerCache(ctx); err != nil {
+	// Get container info from cgroup path
+	cgroupPath, err := findCgroupPath(cgroupID)
+	if err != nil {
 		return nil, err
 	}
 
-	if info, ok := cr.cgroupCache.Load(cgroupID); ok {
-		return info.(*ContainerInfo), nil
+	// In Kubernetes, the cgroup path follows the pattern:
+	// /kubepods/burstable/pod<pod-uid>/<container-id>
+	// or /kubepods/pod<pod-uid>/<container-id>
+	parts := strings.Split(cgroupPath, "/")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("invalid cgroup path: %s", cgroupPath)
 	}
 
-	return nil, fmt.Errorf("container not found for cgroup ID: %d", cgroupID)
+	// Read container metadata from the cgroup annotations
+	containerInfo := &ContainerInfo{
+		CgroupID: cgroupID,
+	}
+
+	// Read Kubernetes metadata from cgroup annotations
+	if err := cr.readK8sMetadata(cgroupPath, containerInfo); err != nil {
+		return nil, err
+	}
+
+	// Cache the result
+	cr.cgroupCache.Store(cgroupID, containerInfo)
+	return containerInfo, nil
+}
+
+func findCgroupPath(cgroupID uint64) (string, error) {
+	// Use find to locate the cgroup.id file with matching ID
+	cmd := exec.Command("find", "/sys/fs/cgroup/kubepods", "-name", "cgroup.id")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find cgroup path: %v", err)
+	}
+
+	// Check each cgroup.id file
+	for _, path := range strings.Split(string(output), "\n") {
+		if path == "" {
+			continue
+		}
+
+		id, err := readCgroupID(path)
+		if err != nil {
+			continue
+		}
+
+		if id == cgroupID {
+			// Return the cgroup path (parent directory of cgroup.id)
+			return filepath.Dir(path), nil
+		}
+	}
+
+	return "", fmt.Errorf("cgroup ID %d not found", cgroupID)
+}
+
+func readCgroupID(path string) (uint64, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+
+	return strconv.ParseUint(strings.TrimSpace(string(content)), 10, 64)
+}
+
+func (cr *ContainerResolver) readK8sMetadata(cgroupPath string, info *ContainerInfo) error {
+	// Read kubernetes metadata from annotations in the cgroup filesystem
+	annotationsPath := filepath.Join(cgroupPath, "annotations")
+
+	files, err := os.ReadDir(annotationsPath)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		content, err := os.ReadFile(filepath.Join(annotationsPath, file.Name()))
+		if err != nil {
+			continue
+		}
+
+		switch file.Name() {
+		case "io.kubernetes.container.name":
+			info.Name = strings.TrimSpace(string(content))
+		case "io.kubernetes.pod.name":
+			info.PodName = strings.TrimSpace(string(content))
+		case "io.kubernetes.pod.namespace":
+			info.Namespace = strings.TrimSpace(string(content))
+		}
+	}
+
+	return nil
 }
