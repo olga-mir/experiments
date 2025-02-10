@@ -1,12 +1,9 @@
 package metrics
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,7 +15,6 @@ import (
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
-	"github.com/cilium/ebpf/ringbuf"
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredres "google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -211,59 +207,6 @@ func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containe
 	return m.client.CreateTimeSeries(ctx, req)
 }
 
-func main() {
-	// Load and attach eBPF program (your existing code here)
-	// ...
-
-	// Create ring buffer reader
-	rd, err := ringbuf.NewReader(objs.events)
-	if err != nil {
-		log.Fatalf("Failed to create ring buffer reader: %v", err)
-	}
-	defer rd.Close()
-
-	// Process events from ring buffer
-	var event runq_event
-	for {
-		record, err := rd.Read()
-		if err != nil {
-			if err == ringbuf.ErrClosed {
-				return
-			}
-			log.Printf("Error reading from ring buffer: %v", err)
-			continue
-		}
-
-		// Parse the event
-		err = binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &event)
-		if err != nil {
-			log.Printf("Failed to parse event: %v", err)
-			continue
-		}
-
-		// Get container info from cgroup ID
-		containerInfo, err := containerRuntime.GetContainerInfo(event.cgroup_id)
-		if err != nil {
-			// This might be a system process, not in a container
-			log.Printf("Failed to get container info: %v", err)
-			continue
-		}
-
-		// Emit latency metric
-		if err := metricsExporter.createTimeSeriesLatency(&event, containerInfo); err != nil {
-			log.Printf("Failed to emit latency metric: %v", err)
-		}
-
-		// Determine preemption type
-		preemptionType := determinePreemptionType(event.prev_cgroup_id, event.cgroup_id)
-
-		// Emit preemption metric
-		if err := metricsExporter.createTimeSeriesPreemption(&event, containerName, preemptionType); err != nil {
-			log.Printf("Failed to emit preemption metric: %v", err)
-		}
-	}
-}
-
 func determinePreemptionType(prevCgroupID, newCgroupID uint64) string {
 	if prevCgroupID == newCgroupID {
 		return "same_container"
@@ -280,10 +223,11 @@ type MetricsExporter struct {
 	metadata    *GKEMetadata
 }
 
-// BPF collection related types
+/*
 type bpfEvents struct {
 	events *ringbuf.Reader
 }
+*/
 
 type ContainerInfo struct {
 	Name      string

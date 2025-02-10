@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
+	"ebpf-hello/pkg/metrics"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 )
 
@@ -45,11 +49,26 @@ func main() {
 	log.Println("Successfully loaded and attached BPF program")
 	log.Println("sudo cat /sys/kernel/debug/tracing/trace_pipe")
 
-	// Initialize metrics exporter
-	metricsExporter, err := NewMetricsExporter()
+	// Create ring buffer reader
+	rd, err := ringbuf.NewReader(objs.events)
 	if err != nil {
-		log.Fatalf("Failed to create metrics exporter: %v", err)
+		log.Fatalf("Failed to create ring buffer reader: %v", err)
 	}
+	defer rd.Close()
+
+	// Create and start collector
+	collector, err := metrics.NewCollector(rd, 30*time.Second)
+	if err != nil {
+		log.Fatalf("Failed to create collector: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := collector.Start(ctx); err != nil {
+		log.Fatalf("Failed to start collector: %v", err)
+	}
+	defer collector.Stop()
 
 	// Wait for a signal to cleanup
 	stopper := make(chan os.Signal, 1)
