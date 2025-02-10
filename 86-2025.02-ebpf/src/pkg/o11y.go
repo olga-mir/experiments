@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	monitoring "cloud.google.com/go/monitoring/apiv3"
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	"github.com/cilium/ebpf/ringbuf"
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
