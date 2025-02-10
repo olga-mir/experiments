@@ -52,6 +52,7 @@ tasks:
     # while this can be done inside lima with some effort, it is just easier to do from local:
     # "gcloud": executable file not found in $PATH
     # Error: Cannot perform an interactive login from a non TTY device
+    # TODO - share docker socket to remove this
     cmds:
       - limactl shell {{.LIMA_INSTANCE_NAME}} docker login -u oauth2accesstoken --password-stdin {{.ARTIFACT_REGISTRY}} <<< $(gcloud auth print-access-token)
 
@@ -79,7 +80,7 @@ tasks:
         --platform linux/amd64
         --push .
 
-  build-ebpf:
+  lima-build-ebpf:
     desc: Only build the source eBPF file with clang, run inside lima
     cmds:
       - clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -I./bpf -I/usr/include/x86_64-linux-gnu -I/usr/include/bpf -c ./bpf/noisy-neighbour.bpf.c -o ./bpf/noisy-neighbour.bpf.o

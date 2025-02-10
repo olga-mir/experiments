@@ -10,7 +10,10 @@ RUN apt-get update && \
     gcc-multilib \
     && rm -rf /var/lib/apt/lists/*
 
+# TODO - maybe move this to taskfile and re-generate only when needed
 #RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
+
+# TODO - version
 RUN go install github.com/cilium/ebpf/cmd/bpf2go@latest
 
 # Create symlink for asm/types.h
@@ -19,11 +22,11 @@ RUN ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
 WORKDIR /app
 
 COPY bpf/* ./bpf/
-COPY go.* ./
-COPY *.go ./
+COPY src/* ./src/
 
 # Download dependencies and generate eBPF code with verbose output
-RUN go mod download && \
+RUN cd src && \
+    go mod download && \
     go generate -v ./... && \
     ls -la && \
     find . -name "*.go"
