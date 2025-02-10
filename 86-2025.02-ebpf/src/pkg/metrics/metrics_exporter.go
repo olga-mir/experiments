@@ -175,6 +175,9 @@ func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containe
 					"pod":             containerInfo.PodName,
 					"namespace":       containerInfo.Namespace,
 					"preemption_type": preemptionType,
+					// Add information about which cgroup caused the preemption
+					"prev_cgroup": fmt.Sprintf("%d", event.PrevCgroupID),
+					"next_cgroup": fmt.Sprintf("%d", event.CgroupID),
 				},
 			},
 			Resource: &monitoredres.MonitoredResource{
@@ -190,6 +193,10 @@ func (m *MetricsExporter) createTimeSeriesPreemption(event *runq_event, containe
 			},
 			Points: []*monitoringpb.Point{{
 				Interval: &monitoringpb.TimeInterval{
+					StartTime: &timestamppb.Timestamp{
+						Seconds: int64(event.Ts / 1000000000), // Convert ns to seconds
+						Nanos:   int32(event.Ts % 1000000000), // Remaining nanoseconds
+					},
 					EndTime: &timestamppb.Timestamp{
 						Seconds: now.Unix(),
 					},
