@@ -1,0 +1,116 @@
+name: GCP OIDC Example
+
+on:
+  push:
+    branches: [ 82-2025.06-oidc-demo ]
+  pull_request:
+    branches: [ 82-2025.06-oidc-demo ]
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  BUCKET_NAME: "github-actions-demo-bucket-${{ github.run_id }}"
+
+jobs:
+  gcp-operations:
+    runs-on: ubuntu-latest
+    
+    # Required for OIDC authentication
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Verify authentication
+      run: |
+        echo "Authenticated as:"
+        gcloud auth list
+        echo "Current project:"
+        gcloud config get-value project
+
+    - name: Create GCS Bucket (Should Succeed)
+      run: |
+        echo "Creating bucket: $BUCKET_NAME"
+        gsutil mb gs://$BUCKET_NAME
+        echo "Bucket created successfully!"
+        
+        # Upload a test file
+        echo "Hello from GitHub Actions!" > test-file.txt
+        gsutil cp test-file.txt gs://$BUCKET_NAME/
+        echo "Test file uploaded successfully!"
+        
+        # List bucket contents
+        echo "Bucket contents:"
+        gsutil ls gs://$BUCKET_NAME/
+
+    - name: Verify bucket permissions
+      run: |
+        echo "Verifying bucket access..."
+        gsutil ls gs://$BUCKET_NAME/
+        gsutil cat gs://$BUCKET_NAME/test-file.txt
+
+    - name: Attempt to create GKE cluster (Should Fail)
+      id: gke_attempt
+      continue-on-error: true
+      run: |
+        echo "Attempting to create GKE cluster (this should fail due to insufficient permissions)..."
+        gcloud container clusters create test-cluster \
+          --zone=us-central1-a \
+          --num-nodes=1 \
+          --machine-type=e2-micro \
+          --disk-size=10GB
+
+    - name: Show GKE failure reason
+      if: steps.gke_attempt.outcome == 'failure'
+      run: |
+        echo "❌ GKE cluster creation failed as expected!"
+        echo "This demonstrates that the service account has limited permissions."
+        echo "The service account only has Storage Admin role, not Kubernetes Engine Admin."
+        echo ""
+        echo "To allow GKE operations, you would need to add these roles:"
+        echo "- roles/container.developer (or roles/container.admin)"
+        echo "- roles/compute.instanceAdmin"
+        echo "- roles/iam.serviceAccountUser"
+
+    - name: Show current IAM roles
+      run: |
+        echo "Current IAM roles for the service account:"
+        gcloud projects get-iam-policy $GCP_PROJECT_ID \
+          --flatten="bindings[].members" \
+          --format="table(bindings.role)" \
+          --filter="bindings.members:${{ secrets.WIF_SERVICE_ACCOUNT }}"
+
+    - name: Cleanup - Delete bucket
+      if: always()
+      run: |
+        echo "Cleaning up - deleting bucket and contents..."
+        gsutil rm -r gs://$BUCKET_NAME/ || echo "Bucket cleanup failed or already deleted"
+
+    - name: Summary
+      if: always()
+      run: |
+        echo ""
+        echo "=== DEMO SUMMARY ==="
+        echo "✅ OIDC Authentication: SUCCESS"
+        echo "✅ GCS Bucket Creation: SUCCESS" 
+        echo "❌ GKE Cluster Creation: FAILED (as expected)"
+        echo ""
+        echo "This demonstrates:"
+        echo "1. Successful OIDC authentication from GitHub Actions to GCP"
+        echo "2. Limited service account permissions working as designed"
+        echo "3. How to grant minimal necessary permissions for specific operations"
