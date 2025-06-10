@@ -17,7 +17,11 @@ done
 
 export POOL_ID="${POOL_ID:-github-actions-pool}"
 export PROVIDER_ID="${PROVIDER_ID:-github-actions-provider}"
-export SERVICE_ACCOUNT_ID="${SERVICE_ACCOUNT_ID:-github-actions-sa}"
+export GITHUB_REPO="${GITHUB_REPO:-olga-mir/experiments}"
+
+echo "Setting up GCP OIDC for GitHub Actions..."
+echo "Project ID: $PROJECT_ID"
+echo "GitHub Repository: $GITHUB_REPO"
 
 # Helper function for retries with exponential backoff
 retry_with_backoff() {
@@ -87,11 +91,13 @@ gcloud iam workload-identity-pools create $POOL_ID \
 # Wait for pool to be available
 wait_for_resource "gcloud iam workload-identity-pools describe $POOL_ID --location=global --quiet" "Workload Identity Pool"
 
+# Get the actual pool name (not the ID we used to create it)
 POOL_NAME=$(gcloud iam workload-identity-pools describe $POOL_ID --location="global" --format="value(name)")
-GITHUB_OWNER=$(echo $GITHUB_REPO | cut -d'/' -f1)
+echo "Actual pool name: $POOL_NAME"
 
 # Create Workload Identity Provider
 echo "Creating Workload Identity Provider..."
+GITHUB_OWNER=$(echo $GITHUB_REPO | cut -d'/' -f1)
 gcloud iam workload-identity-pools providers create-oidc $PROVIDER_ID \
     --location="global" \
     --workload-identity-pool=$POOL_ID \
@@ -103,40 +109,23 @@ gcloud iam workload-identity-pools providers create-oidc $PROVIDER_ID \
 # Wait for provider to be available
 wait_for_resource "gcloud iam workload-identity-pools providers describe $PROVIDER_ID --location=global --workload-identity-pool=$POOL_ID --quiet" "Workload Identity Provider"
 
-# Create Service Account
-echo "Creating Service Account..."
-gcloud iam service-accounts create $SERVICE_ACCOUNT_ID \
-    --description="Service account for GitHub Actions" \
-    --display-name="GitHub Actions SA" || echo "Service Account already exists"
+# Get the actual pool name and provider name
+POOL_NAME=$(gcloud iam workload-identity-pools describe $POOL_ID --location="global" --format="value(name)")
+echo "Actual pool name: $POOL_NAME"
 
-SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
+PROVIDER_NAME=$(gcloud iam workload-identity-pools providers describe $PROVIDER_ID --location=global --workload-identity-pool=$POOL_ID --format="value(name)")
+echo "Provider name: $PROVIDER_NAME"
 
-# Wait for service account to be available
-wait_for_resource "gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL --quiet" "Service Account"
-
-# Grant Storage Admin role to service account (for bucket operations)
-echo "Granting Storage Admin role to service account..."
+# Grant Storage Admin role directly to the workload identity principal (for bucket operations)
+echo "Granting Storage Admin role to workload identity principal..."
 retry_with_backoff gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+    --member="principal://iam.googleapis.com/${POOL_NAME}/subject/repo:${GITHUB_REPO}:ref:refs/heads/main" \
     --role="roles/storage.admin"
 
-# Grant Service Account Token Creator role (required for impersonation)
-echo "Granting Service Account Token Creator role..."
+# Also grant for any branch/ref from this repository
 retry_with_backoff gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
-    --role="roles/iam.serviceAccountTokenCreator"
-
-# Allow GitHub Actions to impersonate the service account
-echo "Allowing GitHub Actions to impersonate service account..."
-echo "Using pool: $POOL_NAME"
-echo "For repository: $GITHUB_REPO"
-
-retry_with_backoff gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL \
-    --role="roles/iam.workloadIdentityUser" \
-    --member="principalSet://iam.googleapis.com/${POOL_NAME}/attribute.repository/${GITHUB_REPO}"
-
-# Get the provider name for GitHub Actions configuration
-PROVIDER_NAME="projects/${PROJECT_ID}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
+    --member="principalSet://iam.googleapis.com/${POOL_NAME}/attribute.repository/${GITHUB_REPO}" \
+    --role="roles/storage.admin"
 
 # Final verification
 echo "Verifying configuration..."
@@ -151,15 +140,11 @@ gcloud iam workload-identity-pools providers describe $PROVIDER_ID \
     --workload-identity-pool=$POOL_ID \
     --format="value(name)"
 
-echo "Checking Service Account..."
-gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL --format="value(email)"
-
 echo ""
 echo "Setup completed successfully!"
 echo ""
 echo "Add these secrets to your GitHub repository:"
 echo "WIF_PROVIDER: $PROVIDER_NAME"
-echo "WIF_SERVICE_ACCOUNT: $SERVICE_ACCOUNT_EMAIL"
 echo "GCP_PROJECT_ID: $PROJECT_ID"
 echo ""
 echo "To add secrets to GitHub:"
