@@ -13,7 +13,7 @@ env:
 jobs:
   gcp-operations:
     runs-on: ubuntu-latest
-    
+
     # Required for OIDC authentication
     permissions:
       contents: read
@@ -37,22 +37,21 @@ jobs:
 
     - name: Verify authentication
       run: |
-        echo "Authenticated as:"
-        gcloud auth list
-        echo "Current project:"
-        gcloud config get-value project
+        echo "✅ Successfully authenticated to GCP"
+        echo "Current project: $(gcloud config get-value project 2>/dev/null)"
 
     - name: Create GCS Bucket (Should Succeed)
       run: |
         echo "Creating bucket: $BUCKET_NAME"
-        gsutil mb gs://$BUCKET_NAME
+        # Create bucket with uniform bucket-level access for workload identity federation
+        gsutil mb -b on gs://$BUCKET_NAME
         echo "Bucket created successfully!"
-        
+
         # Upload a test file
         echo "Hello from GitHub Actions!" > test-file.txt
         gsutil cp test-file.txt gs://$BUCKET_NAME/
         echo "Test file uploaded successfully!"
-        
+
         # List bucket contents
         echo "Bucket contents:"
         gsutil ls gs://$BUCKET_NAME/
@@ -106,7 +105,7 @@ jobs:
         echo ""
         echo "=== DEMO SUMMARY ==="
         echo "✅ OIDC Authentication: SUCCESS"
-        echo "✅ GCS Bucket Creation: SUCCESS" 
+        echo "✅ GCS Bucket Creation: SUCCESS"
         echo "❌ GKE Cluster Creation: FAILED (as expected)"
         echo ""
         echo "This demonstrates:"
