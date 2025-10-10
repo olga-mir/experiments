@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Project configuration
-export PROJECT_ID="cloud-run-demo-474608"
-export PROJECT_NUMBER="763924620189"
-export REGION="australia-southeast1"
-
 # Network configuration
 export VPC_NAME="main-vpc"
 export SUBNET_DEV="apps-dev"
