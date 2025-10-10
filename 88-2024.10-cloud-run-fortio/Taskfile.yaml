@@ -178,15 +178,16 @@ tasks:
         --role="roles/run.invoker"
 
   print-authed-load-test-request:
-    desc: Print command to run Fortio load test (set BASTION env var to the name of bastion VM and GOOGLE_APPLICATION_CREDENTIALS is st nd point to valid credentials)
+    desc: Print command to run Fortio load test from bastion to Fortio Cloud Run service
     vars:
-      BASTION_HOST: "bastion-1738038985"
+      BASTION_HOST: "bastion"
       SOURCE_CLOUD_RUN_URL: $(gcloud run services describe {{.SRC_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
       TARGET_CLOUD_RUN_URL: $(gcloud run services describe {{.DEST_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
     cmds:
       - HEADER=$(cd idtoken && TARGET_CLOUD_RUN_SERVICE={{.TARGET_CLOUD_RUN_URL}} go run main.go) TARGET_URL={{.TARGET_CLOUD_RUN_URL}} envsubst < tests/request-metadata-cr-to-cr-invoker.tpl.json > rendered.json
-      - echo "copying rendered.json to the bastion host"
+      - echo && echo "copying rendered.json to the bastion host" && echo
       - gcloud compute scp rendered.json {{.BASTION_HOST}}:/tmp/rendered.json --zone=australia-southeast1-b --tunnel-through-iap
+      - echo && echo "export TOKEN on the bastion host with the value from your local by running `task get-auth-token | pbcopy` "&& echo
       - echo "Run this curl command on the bastion host (TOKEN should be set on the bastion host)"
       - |
         echo "curl -H \"Authorization: Bearer \$TOKEN\" --data @/tmp/rendered.json \"{{.SOURCE_CLOUD_RUN_URL}}/fortio/rest/run?jsonPath=.metadata\""
