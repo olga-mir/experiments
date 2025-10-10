@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "url": "${TARGET_URL}",
+    "qps": "10",
+    "c": "2",
+    "t": "5s",
+    "headers": [
+      "${HEADER}"
+    ],
+    "save": "on",
+    "labels": "cr-to-cr-authenticated",
+    "async": "on"
+  }
+}

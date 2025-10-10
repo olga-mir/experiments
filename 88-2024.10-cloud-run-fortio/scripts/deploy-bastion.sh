@@ -61,23 +61,56 @@ if ! gcloud compute firewall-rules describe "$FW_RULE_INTERNAL" \
             --format='get(ipCidrRange)')"
 fi
 
-# Create bastion VM
-INSTANCE_NAME="bastion-$(date +%s)"
+INSTANCE_NAME="bastion"
 echo "Creating bastion VM $INSTANCE_NAME..."
-gcloud compute instances create "$INSTANCE_NAME" \
-    --project="$PROJECT_ID" \
-    --zone="${REGION}-b" \
-    --machine-type="e2-micro" \
-    --subnet="$SUBNET_VM" \
-    --no-address \
-    --image-family="debian-12" \
-    --image-project="debian-cloud" \
-    --metadata="enable-oslogin=true" \
-    --scopes="cloud-platform"
 
-echo "Installing required packages on bastion..."
-gcloud compute ssh "$INSTANCE_NAME" \
+# Check if bastion already exists
+if gcloud compute instances describe "$INSTANCE_NAME" \
     --project="$PROJECT_ID" \
-    --zone="${REGION}-b" \
-    --tunnel-through-iap \
-    --command='sudo apt-get update && sudo apt-get install -y curl'
+    --zone="${REGION}-b" &>/dev/null; then
+    echo "Bastion VM $INSTANCE_NAME already exists. Skipping creation."
+else
+    gcloud compute instances create "$INSTANCE_NAME" \
+        --project="$PROJECT_ID" \
+        --zone="${REGION}-b" \
+        --machine-type="e2-micro" \
+        --subnet="$SUBNET_VM" \
+        --no-address \
+        --image-family="debian-12" \
+        --image-project="debian-cloud" \
+        --metadata="enable-oslogin=true" \
+        --scopes="cloud-platform"
+
+    echo "Waiting for VM to be ready and IAP tunnel to be available..."
+    sleep 30
+
+    echo "Installing required packages on bastion..."
+    # Retry SSH connection up to 3 times with delays
+    max_attempts=3
+    attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        echo "SSH attempt $attempt/$max_attempts..."
+        if gcloud compute ssh "$INSTANCE_NAME" \
+            --project="$PROJECT_ID" \
+            --zone="${REGION}-b" \
+            --tunnel-through-iap \
+            --command='sudo apt-get update && sudo apt-get install -y curl' 2>/dev/null; then
+            echo "Successfully installed packages!"
+            break
+        else
+            if [ $attempt -lt $max_attempts ]; then
+                echo "SSH failed, waiting 15 seconds before retry..."
+                sleep 15
+            else
+                echo "WARNING: Failed to install packages after $max_attempts attempts."
+                echo "You can manually install curl later by running:"
+                echo "  gcloud compute ssh $INSTANCE_NAME --project=$PROJECT_ID --zone=${REGION}-b --tunnel-through-iap --command='sudo apt-get update && sudo apt-get install -y curl'"
+            fi
+        fi
+        attempt=$((attempt + 1))
+    done
+fi
+
+echo ""
+echo "Bastion VM ready: $INSTANCE_NAME"
+echo "To connect: gcloud compute ssh $INSTANCE_NAME --project=$PROJECT_ID --zone=${REGION}-b --tunnel-through-iap"
