@@ -24,19 +24,22 @@ Run this scenario with
 task deploy-info
 ```
 
-# Expriment 2: Cloud Run to Cloud Run Scenarios
+# Experiment 2: Cloud Run to Cloud Run Scenarios
 
 ## Prepare Creds and Config
 
-When both source and destination services are enforcing invoker check, you can pass token as a header (this is not secure and should only be done for shortlived projects and SA keys, the passed header will be printed in the log at the default fortio log level)
+When both source and destination services are enforcing invoker check, you need to generate JWT tokens for authentication.
 
-Unfortunatelly Google does not provide transparent auth for service accounts for Cloud Run invoker check, the process is described [in authenticating service-to-service docs](https://cloud.google.com/run/docs/authenticating/service-to-service#acquire-token)
+### Setup Authentication
 
-Obtain SA key of the Service Account associated with the calling service and store it at `GOOGLE_APPLICATION_CREDENTIALS`, then run:
+Use Application Default Credentials (recommended):
 
 ```terminal
+gcloud auth application-default login
 task print-authed-load-test-request
 ```
+
+See [docs/authentication-setup.md](docs/authentication-setup.md) for detailed authentication setup instructions, including alternative methods.
 
 This task will do a few things
 1. get the url of the downstream service

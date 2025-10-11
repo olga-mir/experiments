@@ -183,6 +183,18 @@ tasks:
       BASTION_HOST: "bastion"
       SOURCE_CLOUD_RUN_URL: $(gcloud run services describe {{.SRC_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
       TARGET_CLOUD_RUN_URL: $(gcloud run services describe {{.DEST_FORTIO_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)')
+    preconditions:
+      - sh: |
+          if [ -n "${GOOGLE_APPLICATION_CREDENTIALS}" ] && [ ! -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]; then
+            exit 1
+          fi
+          exit 0
+        msg: |
+          GOOGLE_APPLICATION_CREDENTIALS points to a file that doesn't exist: ${GOOGLE_APPLICATION_CREDENTIALS}
+
+          Either:
+          1. Create the key file: gcloud iam service-accounts keys create ${GOOGLE_APPLICATION_CREDENTIALS} --iam-account={{.FORTIO_SERVICE_ACCOUNT}}
+          2. Or unset it to use Application Default Credentials: unset GOOGLE_APPLICATION_CREDENTIALS
     cmds:
       - HEADER=$(cd idtoken && TARGET_CLOUD_RUN_SERVICE={{.TARGET_CLOUD_RUN_URL}} go run main.go) TARGET_URL={{.TARGET_CLOUD_RUN_URL}} envsubst < tests/request-metadata-cr-to-cr-invoker.tpl.json > rendered.json
       - echo && echo "copying rendered.json to the bastion host" && echo
@@ -213,4 +225,3 @@ tasks:
     desc: Show list of available tasks and their descriptions
     cmds:
       - task --list
-
