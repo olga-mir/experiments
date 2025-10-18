@@ -1,7 +1,7 @@
 {
   "ingress": "INGRESS_TRAFFIC_INTERNAL_ONLY",
   "template": {
-    "serviceAccount": "${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com",
+    "serviceAccount": "${SERVICE_NAME}@${PROJECT_ID}.iam.gserviceaccount.com",
     "executionEnvironment": "EXECUTION_ENVIRONMENT_GEN2",
     "maxInstanceRequestConcurrency": 80,
     "timeout": "300s",
@@ -13,7 +13,11 @@
         {
           "network": "${VPC_URI}",
           "subnetwork": "${SUBNET_URI}",
-          "tags": []
+          "tags": [
+            "cloudrun-service",
+            "allow-egress",
+            "env-staging"
+          ]
         }
       ]
     },
