@@ -74,6 +74,32 @@ tasks:
     cmds:
       - gcloud run services delete {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --quiet
 
+  proxy-n8n:
+    desc: Start Cloud Run proxy for n8n (access on http://localhost:8080)
+    cmds:
+      - echo "Starting Cloud Run proxy for n8n on http://localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud beta run services proxy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --project={{.PROJECT_ID}}
+
+  proxy-gemma:
+    desc: Start Cloud Run proxy for gemma (access on http://localhost:8080)
+    cmds:
+      - echo "Starting Cloud Run proxy for gemma on http://localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud beta run services proxy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --project={{.PROJECT_ID}}
+
+  tunnel-bastion:
+    desc: Create SSH tunnel through bastion (forwards localhost:8080)
+    cmds:
+      - echo "Creating SSH tunnel through bastion to localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap -- -L 8080:localhost:8080
+
+  get-token:
+    desc: Get identity token for authenticating to Cloud Run services
+    cmds:
+      - gcloud auth print-identity-token
+
   show-config:
     desc: Display current configuration from environment variables
     cmds:
