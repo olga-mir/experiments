@@ -45,24 +45,14 @@ export NETWORK_PROJECT_ID=""
 export NETWORK_PROJECT_NUMBER=""
 ```
 
-Source the file:
-```bash
-source env.sh
-```
-
 ## Quick Start
 
-1. **View available tasks:**
+**View available tasks:**
    ```bash
    task --list
    ```
 
-2. **Check your configuration:**
-   ```bash
-   task show-config
-   ```
-
-3. **Setup complete infrastructure:**
+**Setup complete infrastructure:**
    ```bash
    task setup-all
    ```
@@ -70,11 +60,6 @@ source env.sh
    - Create VPC network and subnet
    - Configure firewall rules for IAP
    - Deploy bastion host
-
-4. **Connect to bastion:**
-   ```bash
-   task connect-bastion
-   ```
 
 ## Available Tasks
 
@@ -110,27 +95,6 @@ source env.sh
 - **allow-iap-tunnel**: Allows SSH (TCP:22) from IAP range (35.235.240.0/20)
 - **allow-internal-all**: Allows TCP/UDP/ICMP within 10.0.0.0/8
 
-## Bastion Host
-
-The bastion host is a minimal VM used for accessing internal Cloud Run services:
-
-- **Instance Type**: e2-micro
-- **OS**: Debian 12
-- **Network**: No external IP (private only)
-- **Access**: Via IAP tunnel
-- **Authentication**: OS Login enabled
-- **Packages**: curl pre-installed for testing
-
-### Connecting to Bastion
-
-```bash
-# Using task
-task connect-bastion
-
-# Using gcloud directly
-gcloud compute ssh bastion --project=$PROJECT_ID --zone=$ZONE --tunnel-through-iap
-```
-
 ## Security Features
 
 1. **No External IPs**: All resources use private IPs only
@@ -138,18 +102,6 @@ gcloud compute ssh bastion --project=$PROJECT_ID --zone=$ZONE --tunnel-through-i
 3. **Internal-only Cloud Run**: Services not exposed to public internet
 4. **OS Login**: Cloud-based SSH key management
 5. **Service Account Authentication**: Cloud Run services use dedicated service accounts
-
-## Project Structure
-
-```
-.
-├── Taskfile.yaml              # Task automation and orchestration
-├── scripts/
-│   ├── setup-network.sh      # VPC and networking setup
-│   └── setup-bastion.sh      # Bastion host deployment
-├── README.md                  # This file
-└── CLAUDE.md                  # AI assistant context
-```
 
 ## Troubleshooting
 
@@ -168,22 +120,6 @@ If you can't connect to the bastion:
    ```bash
    gcloud compute firewall-rules describe allow-iap-tunnel --project=$PROJECT_ID
    ```
-
-### Environment Variables Not Set
-
-If tasks fail with missing environment variables:
-
-```bash
-# Check current config
-task show-config
-
-# Re-source your environment file
-source env.sh
-```
-
-### Network Already Exists
-
-The scripts are idempotent - they check if resources exist before creating them. You can safely re-run setup tasks.
 
 ## Next Steps
 
