@@ -51,11 +51,6 @@
       "type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST",
       "percent": 100,
       "tag": "src-fortio"
-    },
-    {
-      "type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST",
-      "percent": 0,
-      "tag": "all-cloudruns"
     }
   ]
 }

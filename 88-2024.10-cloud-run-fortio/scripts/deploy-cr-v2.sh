@@ -14,7 +14,7 @@ SERVICE_NAME="src-fortio"
 VPC_URI="projects/${PROJECT_ID}/global/networks/${NETWORK}"
 SUBNET_URI="projects/${PROJECT_ID}/regions/${REGION}/subnetworks/${SUBNETWORK}"
 
-export PROJECT_ID SA_NAME VPC_URI SUBNET_URI
+export PROJECT_ID SA_NAME VPC_URI SUBNET_URI SERVICE_NAME
 envsubst < "${TEMPLATE_FILE}" > "${SERVICE_JSON}"
 
 TOKEN=$(gcloud auth print-access-token)
