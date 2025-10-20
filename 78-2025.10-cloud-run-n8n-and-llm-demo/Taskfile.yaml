@@ -1,0 +1,74 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  PROJECT_NUMBER:
+    sh: echo "${PROJECT_NUMBER:?'PROJECT_NUMBER environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  ZONE:
+    sh: echo "${ZONE:?'ZONE environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+  USER_EMAIL:
+    sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
+
+tasks:
+  setup-network:
+    desc: Setup VPC network and subnets
+    cmds:
+      - ./scripts/setup-network.sh
+
+  setup-bastion:
+    desc: Setup bastion host for accessing Cloud Run services
+    deps: [setup-network]
+    cmds:
+      - ./scripts/setup-bastion.sh
+
+  setup-all:
+    desc: Setup complete infrastructure (network + bastion)
+    cmds:
+      - task: setup-network
+      - task: setup-bastion
+
+  connect-bastion:
+    desc: Connect to bastion host via IAP tunnel
+    cmds:
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+
+  delete-bastion:
+    desc: Delete bastion host
+    cmds:
+      - gcloud compute instances delete bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
+
+  delete-network:
+    desc: Delete network infrastructure (WARNING - destructive)
+    prompt: This will delete the VPC network and all associated resources. Continue?
+    cmds:
+      - echo "Deleting firewall rules..."
+      - gcloud compute firewall-rules delete allow-iap-tunnel --project={{.PROJECT_ID}} --quiet || true
+      - gcloud compute firewall-rules delete allow-internal-all --project={{.PROJECT_ID}} --quiet || true
+      - echo "Deleting subnet..."
+      - gcloud compute networks subnets delete {{.SUBNETWORK}} --project={{.PROJECT_ID}} --region={{.REGION}} --quiet || true
+      - echo "Deleting VPC network..."
+      - gcloud compute networks delete {{.NETWORK}} --project={{.PROJECT_ID}} --quiet || true
+      - echo "Network infrastructure deleted"
+
+  show-config:
+    desc: Display current configuration from environment variables
+    cmds:
+      - echo "Project ID       - {{.PROJECT_ID}}"
+      - echo "Project Number   - {{.PROJECT_NUMBER}}"
+      - echo "Region           - {{.REGION}}"
+      - echo "Zone             - {{.ZONE}}"
+      - echo "Network          - {{.NETWORK}}"
+      - echo "Subnetwork       - {{.SUBNETWORK}}"
+      - echo "User Email       - {{.USER_EMAIL}}"
+
+  help:
+    desc: Show list of available tasks and their descriptions
+    cmds:
+      - task --list
