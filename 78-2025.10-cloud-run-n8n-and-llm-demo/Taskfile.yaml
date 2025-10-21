@@ -100,6 +100,35 @@ tasks:
     cmds:
       - gcloud auth print-identity-token
 
+  bastion-install-tools:
+    desc: Install network tools (dig, nslookup, jq) on bastion host
+    cmds:
+      - echo "Copying installation script to bastion..."
+      - gcloud compute scp scripts/bastion-install-tools.sh bastion:/tmp/ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo "Running installation script on bastion..."
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command="chmod +x /tmp/bastion-install-tools.sh && /tmp/bastion-install-tools.sh"
+
+  bastion-copy-test-script:
+    desc: Copy gemma test script to bastion host
+    cmds:
+      - echo "Copying test-gemma.sh to bastion..."
+      - gcloud compute scp scripts/test-gemma.sh bastion:/home/$USER/ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo "Script copied to bastion:/home/$USER/test-gemma.sh"
+      - echo ""
+      - echo "To use on bastion:"
+      - echo "  export GEMMA_URL=\$$(gcloud run services describe gemma-model --region={{.GEMMA_REGION}} --format='value(status.url)')"
+      - echo "  ./test-gemma.sh \"Your question here\""
+
+  bastion-test-gemma:
+    desc: Run gemma test from bastion host
+    vars:
+      GEMMA_URL:
+        sh: gcloud run services describe gemma-model --region={{.GEMMA_REGION}} --format='value(status.url)'
+      PROMPT: '{{.PROMPT | default "Hello, how are you?"}}'
+    cmds:
+      - echo "Testing Gemma service from bastion..."
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command="export GEMMA_URL={{.GEMMA_URL}} && /home/$USER/test-gemma.sh '{{.PROMPT}}'"
+
   show-config:
     desc: Display current configuration from environment variables
     cmds:

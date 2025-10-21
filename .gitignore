@@ -9,4 +9,4 @@
 90-2024.07-kwok-and-load-test/kwok-nodes/*
 
 88-2024.10-cloud-run-fortio/src/bin/
-88-2024.10-cloud-run-fortio/scripts/service-v2.json
+**/v2-service.json
