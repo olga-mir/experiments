@@ -41,12 +41,6 @@ tasks:
     cmds:
       - ./scripts/deploy-n8n.sh
 
-  deploy-all:
-    desc: Deploy all Cloud Run services (n8n + gemma)
-    cmds:
-      - task: deploy-n8n
-      - task: gemma:deploy
-
   get-n8n-url:
     desc: Get n8n service URL
     cmds:
@@ -76,6 +70,21 @@ tasks:
     cmds:
       - gcloud auth print-identity-token
 
+  extract-tools:
+    desc: Create temp VM, install tools, and copy to local machine
+    cmds:
+      - ./scripts/setup-temp-vm-for-tools.sh
+
+  delete-temp-vm:
+    desc: Delete the temporary tools VM
+    cmds:
+      - gcloud compute instances delete temp-tools-vm --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
+
+  bastion-install-tools:
+    desc: Install dig, curl, jq on bastion (extracts from Docker Debian image)
+    cmds:
+      - ./scripts/copy-tools-to-bastion.sh
+
   bastion-copy-install-tools:
     desc: Copy network tools installation script to bastion host
     cmds:
@@ -92,7 +101,7 @@ tasks:
       - echo "Copying test-n8n.sh to bastion..."
       - gcloud compute scp scripts/test-n8n.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
       - echo ""
-      - echo "Script copied to bastion:~/test-n8n.sh"
+      - echo "Script copied to bastion: ~/test-n8n.sh"
       - echo "To use on bastion:"
       - echo "  export N8N_URL=\$$(gcloud run services describe n8n --region={{.REGION}} --format='value(status.url)')"
       - echo "  ./test-n8n.sh"
