@@ -5,43 +5,19 @@ vars:
     sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
   REGION:
     sh: echo "${REGION:?'REGION environment variable is required'}"
-  ZONE:
-    sh: echo "${ZONE:?'ZONE environment variable is required'}"
   NETWORK:
     sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
   SUBNETWORK:
     sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
 
 tasks:
-  setup-network:
-    desc: Setup VPC network and subnets
+  setup:
+    desc: Setup VPC network, subnets, and firewall rules
     cmds:
       - ./scripts/setup-network.sh
 
-  setup-bastion:
-    desc: Setup bastion host for accessing Cloud Run services
-    deps: [setup-network]
-    cmds:
-      - ./scripts/setup-bastion.sh
-
-  setup-all:
-    desc: Setup complete VPC infrastructure (network + bastion)
-    cmds:
-      - task: setup-network
-      - task: setup-bastion
-
-  connect-bastion:
-    desc: Connect to bastion host via IAP tunnel
-    cmds:
-      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-
-  delete-bastion:
-    desc: Delete bastion host
-    cmds:
-      - gcloud compute instances delete bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
-
-  delete-network:
-    desc: Delete network infrastructure (WARNING - destructive)
+  delete:
+    desc: Delete VPC network infrastructure (WARNING - destructive)
     prompt: This will delete the VPC network and all associated resources. Continue?
     cmds:
       - echo "Deleting firewall rules..."

@@ -4,8 +4,11 @@ includes:
   vpc:
     taskfile: ./tasks/vpc.yaml
     optional: true
-  gemma:
-    taskfile: ./tasks/gemma.yaml
+  bastion:
+    taskfile: ./tasks/bastion.yaml
+    optional: true
+  services:
+    taskfile: ./tasks/services.yaml
     optional: true
 
 vars:
@@ -24,47 +27,7 @@ vars:
   USER_EMAIL:
     sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
 
-  # N8N service configuration
-  N8N_SERVICE_NAME: n8n
-  N8N_SA_NAME: n8n-service
-  N8N_SERVICE_ACCOUNT: 'n8n-service@{{.PROJECT_ID}}.iam.gserviceaccount.com'
-
 tasks:
-  setup-service-accounts:
-    desc: Create service accounts for Cloud Run services
-    cmds:
-      - ./scripts/setup-service-accounts.sh
-
-  deploy-n8n:
-    desc: Deploy n8n workflow automation to Cloud Run
-    deps: [setup-service-accounts]
-    cmds:
-      - ./scripts/deploy-n8n.sh
-
-  get-n8n-url:
-    desc: Get n8n service URL
-    cmds:
-      - gcloud run services describe {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)'
-
-  delete-n8n:
-    desc: Delete n8n Cloud Run service
-    cmds:
-      - gcloud run services delete {{.N8N_SERVICE_NAME}} --region={{.REGION}} --quiet
-
-  proxy-n8n:
-    desc: Start Cloud Run proxy for n8n (access on http://localhost:8080)
-    cmds:
-      - echo "Starting Cloud Run proxy for n8n on http://localhost:8080"
-      - echo "Press Ctrl+C to stop"
-      - gcloud beta run services proxy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --project={{.PROJECT_ID}}
-
-  tunnel-bastion:
-    desc: Create SSH tunnel through bastion (forwards localhost:8080)
-    cmds:
-      - echo "Creating SSH tunnel through bastion to localhost:8080"
-      - echo "Press Ctrl+C to stop"
-      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap -- -L 8080:localhost:8080
-
   get-token:
     desc: Get identity token for authenticating to Cloud Run services
     cmds:
@@ -79,32 +42,6 @@ tasks:
     desc: Delete the temporary tools VM
     cmds:
       - gcloud compute instances delete temp-tools-vm --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
-
-  bastion-install-tools:
-    desc: Install dig, curl, jq on bastion (extracts from Docker Debian image)
-    cmds:
-      - ./scripts/copy-tools-to-bastion.sh
-
-  bastion-copy-install-tools:
-    desc: Copy network tools installation script to bastion host
-    cmds:
-      - echo "Copying bastion-install-tools.sh to bastion..."
-      - gcloud compute scp scripts/bastion-install-tools.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo ""
-      - echo "Script copied to bastion:~/bastion-install-tools.sh"
-      - echo "To run on bastion:"
-      - echo "  ./bastion-install-tools.sh"
-
-  bastion-copy-n8n-test:
-    desc: Copy n8n test script to bastion host
-    cmds:
-      - echo "Copying test-n8n.sh to bastion..."
-      - gcloud compute scp scripts/test-n8n.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo ""
-      - echo "Script copied to bastion: ~/test-n8n.sh"
-      - echo "To use on bastion:"
-      - echo "  export N8N_URL=\$$(gcloud run services describe n8n --region={{.REGION}} --format='value(status.url)')"
-      - echo "  ./test-n8n.sh"
 
   show-config:
     desc: Display current configuration from environment variables

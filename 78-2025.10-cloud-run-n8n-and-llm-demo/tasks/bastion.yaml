@@ -1,0 +1,75 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  ZONE:
+    sh: echo "${ZONE:?'ZONE environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+
+tasks:
+  setup:
+    desc: Setup bastion host with IAP access
+    cmds:
+      - ./scripts/setup-bastion.sh
+
+  connect:
+    desc: Connect to bastion host via IAP tunnel
+    cmds:
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+
+  delete:
+    desc: Delete bastion host
+    cmds:
+      - gcloud compute instances delete bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
+
+  tunnel:
+    desc: Create SSH tunnel through bastion (forwards localhost:8080)
+    cmds:
+      - echo "Creating SSH tunnel through bastion to localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap -- -L 8080:localhost:8080
+
+  copy-tools-script:
+    desc: Copy network tools installation script to bastion
+    cmds:
+      - echo "Copying bastion-install-tools.sh to bastion..."
+      - gcloud compute scp scripts/bastion-install-tools.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo ""
+      - echo "Script copied to bastion  ~/bastion-install-tools.sh"
+      - echo "To run on bastion:"
+      - echo "  ./bastion-install-tools.sh"
+
+  copy-n8n-test:
+    desc: Copy n8n test script to bastion
+    cmds:
+      - echo "Copying test-n8n.sh to bastion..."
+      - gcloud compute scp scripts/test-n8n.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo ""
+      - echo "Script copied to bastion:~/test-n8n.sh"
+      - echo "To use on bastion:"
+      - echo "  export N8N_URL=\$$(gcloud run services describe n8n --region={{.REGION}} --format='value(status.url)')"
+      - echo "  ./test-n8n.sh"
+
+  copy-gemma-test:
+    desc: Copy gemma test script to bastion
+    cmds:
+      - echo "Copying test-gemma.sh to bastion..."
+      - gcloud compute scp scripts/test-gemma.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo ""
+      - echo "Script copied to bastion:~/test-gemma.sh"
+      - echo "To use on bastion:"
+      - echo "  export GEMMA_URL=\$$(gcloud run services describe gemma-model --region=asia-southeast1 --format='value(status.url)')"
+      - echo "  ./test-gemma.sh \"Your question here\""
+
+  copy-all-scripts:
+    desc: Copy all test scripts to bastion
+    cmds:
+      - task: copy-tools-script
+      - task: copy-n8n-test
+      - task: copy-gemma-test

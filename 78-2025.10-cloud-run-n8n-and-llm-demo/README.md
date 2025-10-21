@@ -4,9 +4,9 @@ This project demonstrates deploying n8n workflow automation and LLM services on 
 
 ## Architecture
 
-- **VPC Network**: Custom VPC with private subnets
-- **Cloud Run Services**: Internal-only services (no public internet exposure)
-- **Bastion Host**: Compute Engine VM for accessing Cloud Run services via IAP
+- **VPC Network**: VPC in the same project as Cloud Run services
+- **Cloud Run Services**: Internal-only services
+- **Bastion Host**: Compute Engine VM (with no public IP) for accessing Cloud Run services
 - **Security**: Identity-Aware Proxy (IAP) for secure access without external IPs
 
 ## Prerequisites
@@ -45,44 +45,71 @@ export NETWORK_PROJECT_ID=""
 export NETWORK_PROJECT_NUMBER=""
 ```
 
-## Quick Start
+## Tasks
 
-**View available tasks:**
-   ```bash
-   task --list
-   ```
+List all tools
+```
+$ task --list
+$ task help
+```
 
-**Setup complete infrastructure:**
-   ```bash
-   task setup-all
-   ```
-   This will:
-   - Create VPC network and subnet
-   - Configure firewall rules for IAP
-   - Deploy bastion host
+###  📁 tasks/bastion.yaml (Frequently used - Every session)
 
-## Overview Tasks and Scripts
+  - task bastion:setup - Create bastion host
+  - task bastion:connect - SSH to bastion
+  - task bastion:delete - Remove bastion
+  - task bastion:tunnel - Create SSH tunnel (localhost:8080)
+  - task bastion:copy-tools-script - Copy tools install script
+  - task bastion:copy-n8n-test - Copy n8n test script
+  - task bastion:copy-gemma-test - Copy gemma test script
+  - task bastion:copy-all-scripts - Copy all scripts at once
 
--  `task bastion-install-tools` - Copies the installation script (scripts/bastion-install-tools.sh) to bastion. This script installs network diagnostic tools and some common CLI utils. Run this on the bastion host
+###  📁 tasks/services.yaml (Cloud Run services - Both n8n & gemma)
 
-###  Gemma Testing
+  Service Accounts:
+  - task services:setup-service-accounts - Create all service accounts
 
-- `task bastion-copy-test-script`
-  - Copies test-gemma.sh to bastion
-  - Shows usage instructions
+  n8n:
+  - task services:deploy-n8n - Deploy n8n
+  - task services:get-n8n-url - Get n8n URL
+  - task services:delete-n8n - Delete n8n
+  - task services:proxy-n8n - Proxy n8n locally
 
-- `task bastion-test-gemma`
-  - Runs the test directly from your laptop (executes on bastion)
-  - Usage: task bastion-test-gemma PROMPT="What is Kubernetes?"
-  - Default prompt: "Hello, how are you?"
+  Gemma:
+  - task services:deploy-gemma - Deploy gemma
+  - task services:get-gemma-url - Get gemma URL
+  - task services:delete-gemma - Delete gemma
+  - task services:proxy-gemma - Proxy gemma locally
 
-  scripts/test-gemma.sh
+  Combined:
+  - task services:deploy-all - Deploy both services
+  - task services:delete-all - Delete both services
 
-  Tests the Gemma service with a POST request:
-  - Automatically gets authentication token
-  - Sends JSON payload to Gemma's Ollama API (/api/generate)
-  - Pretty prints request and response with jq
-  - Usage: ./test-gemma.sh "Your question here"
+###  📁 Taskfile.yaml (Main - Utility tasks only)
+
+  - `task get-token` - Get auth token
+  - `task extract-tools` - Create temp VM for tools
+
+###  📁 tasks/vpc.yaml (Rarely used - VPC only)
+
+  - task vpc:setup - Create VPC network, subnets, firewall rules
+  - task vpc:delete - Delete entire VPC (destructive)
+
+##  Typical Workflow
+
+```bash
+$ # On new project setup:
+$   task vpc:setup
+$
+$ # Every session:
+$   task bastion:setup
+$   task bastion:connect
+$
+$   task bastion:delete
+$
+$ # Deploy services:
+$   task services:deploy-all
+```
 
 ### Access n8n Locally
 
@@ -91,21 +118,9 @@ need to run both:
 gcloud beta run services proxy n8n --region asia-southeast1 --project $PROJECT_ID
 gcloud compute ssh [BASTION_NAME] --zone=[ZONE] -- -L 8080:localhost:8080
 ```
-Both have dedeicated `tasks`
+Both have dedicated `tasks`
 
-
-### Setup Tasks
-- `task setup-network` - Create VPC network, subnet, and firewall rules
-- `task setup-bastion` - Deploy bastion host with IAP access
-- `task setup-all` - Run complete setup (network + bastion)
-
-### Access Tasks
-- `task connect-bastion` - SSH to bastion host via IAP tunnel
-
-### Utility Tasks
-- `task help` - Show all available tasks
-
-## Network Configuration
+# Network Configuration
 
 ### Subnet
 - **VPC**: Defined by `$NETWORK` environment variable
@@ -117,9 +132,9 @@ Both have dedeicated `tasks`
 - **allow-iap-tunnel**: Allows SSH (TCP:22) from IAP range (35.235.240.0/20)
 - **allow-internal-all**: Allows TCP/UDP/ICMP within 10.0.0.0/8
 
-## Troubleshooting
+# Troubleshooting
 
-### IAP Tunnel Connection Issues
+## IAP Tunnel Connection Issues
 
 If you can't connect to the bastion:
 
@@ -135,7 +150,7 @@ If you can't connect to the bastion:
    gcloud compute firewall-rules describe allow-iap-tunnel --project=$PROJECT_ID
    ```
 
-## References
+# References
 
 - [Cloud Run VPC Access](https://cloud.google.com/run/docs/configuring/vpc-direct-vpc)
 - [Identity-Aware Proxy](https://cloud.google.com/iap/docs)
