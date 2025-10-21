@@ -61,7 +61,38 @@ export NETWORK_PROJECT_NUMBER=""
    - Configure firewall rules for IAP
    - Deploy bastion host
 
-## Available Tasks
+## Overview Tasks and Scripts
+
+-  `task bastion-install-tools` - Copies the installation script (scripts/bastion-install-tools.sh) to bastion. This script installs network diagnostic tools and some common CLI utils. Run this on the bastion host
+
+###  Gemma Testing
+
+- `task bastion-copy-test-script`
+  - Copies test-gemma.sh to bastion
+  - Shows usage instructions
+
+- `task bastion-test-gemma`
+  - Runs the test directly from your laptop (executes on bastion)
+  - Usage: task bastion-test-gemma PROMPT="What is Kubernetes?"
+  - Default prompt: "Hello, how are you?"
+
+  scripts/test-gemma.sh
+
+  Tests the Gemma service with a POST request:
+  - Automatically gets authentication token
+  - Sends JSON payload to Gemma's Ollama API (/api/generate)
+  - Pretty prints request and response with jq
+  - Usage: ./test-gemma.sh "Your question here"
+
+### Access n8n Locally
+
+need to run both:
+```
+gcloud beta run services proxy n8n --region asia-southeast1 --project $PROJECT_ID
+gcloud compute ssh [BASTION_NAME] --zone=[ZONE] -- -L 8080:localhost:8080
+```
+Both have dedeicated `tasks`
+
 
 ### Setup Tasks
 - `task setup-network` - Create VPC network, subnet, and firewall rules
@@ -72,36 +103,19 @@ export NETWORK_PROJECT_NUMBER=""
 - `task connect-bastion` - SSH to bastion host via IAP tunnel
 
 ### Utility Tasks
-- `task show-config` - Display current configuration
 - `task help` - Show all available tasks
-
-### Cleanup Tasks
-- `task delete-bastion` - Remove bastion host
-- `task delete-network` - Remove all network infrastructure (destructive!)
 
 ## Network Configuration
 
-### VPC Network
-- **Name**: Defined by `$NETWORK` environment variable
-- **Subnet Mode**: Custom
-- **BGP Routing**: Regional
-
 ### Subnet
-- **Name**: Defined by `$SUBNETWORK` environment variable
+- **VPC**: Defined by `$NETWORK` environment variable
+- **Subnet**: Defined by `$SUBNETWORK` environment variable
 - **CIDR Range**: 10.0.0.0/24
 - **Private Google Access**: Enabled
 
 ### Firewall Rules
 - **allow-iap-tunnel**: Allows SSH (TCP:22) from IAP range (35.235.240.0/20)
 - **allow-internal-all**: Allows TCP/UDP/ICMP within 10.0.0.0/8
-
-## Security Features
-
-1. **No External IPs**: All resources use private IPs only
-2. **IAP Authentication**: Secure access via Identity-Aware Proxy
-3. **Internal-only Cloud Run**: Services not exposed to public internet
-4. **OS Login**: Cloud-based SSH key management
-5. **Service Account Authentication**: Cloud Run services use dedicated service accounts
 
 ## Troubleshooting
 
@@ -120,14 +134,6 @@ If you can't connect to the bastion:
    ```bash
    gcloud compute firewall-rules describe allow-iap-tunnel --project=$PROJECT_ID
    ```
-
-## Next Steps
-
-- Deploy Cloud Run services with `--network` and `--subnet` flags
-- Configure service accounts for Cloud Run
-- Set up Cloud NAT for outbound internet access (if needed)
-- Deploy n8n workflow automation service
-- Deploy LLM inference services
 
 ## References
 

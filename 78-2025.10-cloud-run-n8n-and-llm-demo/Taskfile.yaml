@@ -4,6 +4,9 @@ includes:
   vpc:
     taskfile: ./tasks/vpc.yaml
     optional: true
+  gemma:
+    taskfile: ./tasks/gemma.yaml
+    optional: true
 
 vars:
   PROJECT_ID:
@@ -21,14 +24,10 @@ vars:
   USER_EMAIL:
     sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
 
-  # Service configuration
+  # N8N service configuration
   N8N_SERVICE_NAME: n8n
   N8N_SA_NAME: n8n-service
   N8N_SERVICE_ACCOUNT: 'n8n-service@{{.PROJECT_ID}}.iam.gserviceaccount.com'
-  GEMMA_SERVICE_NAME: gemma-model
-  GEMMA_SA_NAME: gemma-service
-  GEMMA_SERVICE_ACCOUNT: 'gemma-service@{{.PROJECT_ID}}.iam.gserviceaccount.com'
-  GEMMA_REGION: asia-southeast1
 
 tasks:
   setup-service-accounts:
@@ -42,37 +41,21 @@ tasks:
     cmds:
       - ./scripts/deploy-n8n.sh
 
-  deploy-gemma:
-    desc: Deploy Gemma LLM model to Cloud Run
-    deps: [setup-service-accounts]
-    cmds:
-      - ./scripts/deploy-gemma.sh
-
   deploy-all:
     desc: Deploy all Cloud Run services (n8n + gemma)
     cmds:
       - task: deploy-n8n
-      - task: deploy-gemma
+      - task: gemma:deploy
 
   get-n8n-url:
     desc: Get n8n service URL
     cmds:
       - gcloud run services describe {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)'
 
-  get-gemma-url:
-    desc: Get gemma service URL
-    cmds:
-      - gcloud run services describe {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format='value(status.url)'
-
   delete-n8n:
     desc: Delete n8n Cloud Run service
     cmds:
       - gcloud run services delete {{.N8N_SERVICE_NAME}} --region={{.REGION}} --quiet
-
-  delete-gemma:
-    desc: Delete gemma Cloud Run service
-    cmds:
-      - gcloud run services delete {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --quiet
 
   proxy-n8n:
     desc: Start Cloud Run proxy for n8n (access on http://localhost:8080)
@@ -80,13 +63,6 @@ tasks:
       - echo "Starting Cloud Run proxy for n8n on http://localhost:8080"
       - echo "Press Ctrl+C to stop"
       - gcloud beta run services proxy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --project={{.PROJECT_ID}}
-
-  proxy-gemma:
-    desc: Start Cloud Run proxy for gemma (access on http://localhost:8080)
-    cmds:
-      - echo "Starting Cloud Run proxy for gemma on http://localhost:8080"
-      - echo "Press Ctrl+C to stop"
-      - gcloud beta run services proxy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --project={{.PROJECT_ID}}
 
   tunnel-bastion:
     desc: Create SSH tunnel through bastion (forwards localhost:8080)
@@ -100,34 +76,26 @@ tasks:
     cmds:
       - gcloud auth print-identity-token
 
-  bastion-install-tools:
-    desc: Install network tools (dig, nslookup, jq) on bastion host
+  bastion-copy-install-tools:
+    desc: Copy network tools installation script to bastion host
     cmds:
-      - echo "Copying installation script to bastion..."
-      - gcloud compute scp scripts/bastion-install-tools.sh bastion:/tmp/ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo "Running installation script on bastion..."
-      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command="chmod +x /tmp/bastion-install-tools.sh && /tmp/bastion-install-tools.sh"
-
-  bastion-copy-test-script:
-    desc: Copy gemma test script to bastion host
-    cmds:
-      - echo "Copying test-gemma.sh to bastion..."
-      - gcloud compute scp scripts/test-gemma.sh bastion:/home/$USER/ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo "Script copied to bastion:/home/$USER/test-gemma.sh"
+      - echo "Copying bastion-install-tools.sh to bastion..."
+      - gcloud compute scp scripts/bastion-install-tools.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
       - echo ""
-      - echo "To use on bastion:"
-      - echo "  export GEMMA_URL=\$$(gcloud run services describe gemma-model --region={{.GEMMA_REGION}} --format='value(status.url)')"
-      - echo "  ./test-gemma.sh \"Your question here\""
+      - echo "Script copied to bastion:~/bastion-install-tools.sh"
+      - echo "To run on bastion:"
+      - echo "  ./bastion-install-tools.sh"
 
-  bastion-test-gemma:
-    desc: Run gemma test from bastion host
-    vars:
-      GEMMA_URL:
-        sh: gcloud run services describe gemma-model --region={{.GEMMA_REGION}} --format='value(status.url)'
-      PROMPT: '{{.PROMPT | default "Hello, how are you?"}}'
+  bastion-copy-n8n-test:
+    desc: Copy n8n test script to bastion host
     cmds:
-      - echo "Testing Gemma service from bastion..."
-      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command="export GEMMA_URL={{.GEMMA_URL}} && /home/$USER/test-gemma.sh '{{.PROMPT}}'"
+      - echo "Copying test-n8n.sh to bastion..."
+      - gcloud compute scp scripts/test-n8n.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - echo ""
+      - echo "Script copied to bastion:~/test-n8n.sh"
+      - echo "To use on bastion:"
+      - echo "  export N8N_URL=\$$(gcloud run services describe n8n --region={{.REGION}} --format='value(status.url)')"
+      - echo "  ./test-n8n.sh"
 
   show-config:
     desc: Display current configuration from environment variables
