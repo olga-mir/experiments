@@ -42,5 +42,6 @@ curl -s -X POST "$GEMMA_URL/api/generate" \
 # Or copy-paste from here
 
 # curl -vvv -s -H "Authorization: Bearer $TOKEN" "$N8N_URL" -o /dev/null 2>&1 | grep -v Bearer
-# curl -s -X POST https://gemma-model-13764001905.asia-southeast1.run.app/api/generate -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -d @/tmp/gemma-request.json --max-time 120
+# curl -s -X POST https://gemma-model-13764001905.asia-southeast1.run.app/api/generate -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -d @/tmp/gemma-request.json --max-time 120 2>&1 | grep -v Bearer
+# curl -s -vvv -X POST https://gemma-model-13764001905.asia-southeast1.run.app/api/generate -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -d @/tmp/gemma-request.json -o /dev/null 2>&1 | grep -v Bearer
 
