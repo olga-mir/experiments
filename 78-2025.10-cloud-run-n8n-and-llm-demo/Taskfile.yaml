@@ -28,20 +28,18 @@ vars:
     sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
 
 tasks:
+  setup:
+    desc: setup bastion and services
+    cmds:
+      - task bastion:setup
+      - task services:deploy-n8n
+      - gcloud compute scp bastion-tools/tools.tar.gz bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command='tar xzf tools.tar.gz && echo "export PATH=\$HOME/bin:\$PATH" >> ~/.bashrc && echo "export LD_LIBRARY_PATH=\$HOME/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc'
+
   get-token:
     desc: Get identity token for authenticating to Cloud Run services
     cmds:
       - gcloud auth print-identity-token
-
-  extract-tools:
-    desc: Create temp VM, install tools, and copy to local machine
-    cmds:
-      - ./scripts/setup-temp-vm-for-tools.sh
-
-  delete-temp-vm:
-    desc: Delete the temporary tools VM
-    cmds:
-      - gcloud compute instances delete temp-tools-vm --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
 
   show-config:
     desc: Display current configuration from environment variables

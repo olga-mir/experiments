@@ -30,6 +30,22 @@ tasks:
     cmds:
       - ./scripts/setup-service-accounts.sh
 
+  # IAM Permissions
+  setup-invoker-permissions:
+    desc: Grant invoker permissions (USER->n8n, USER->gemma, n8n->gemma)
+    cmds:
+      - ./scripts/setup-invoker-permissions.sh
+
+  show-n8n-iam:
+    desc: Show current IAM policy for n8n service
+    cmds:
+      - gcloud run services get-iam-policy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format=json
+
+  show-gemma-iam:
+    desc: Show current IAM policy for gemma service
+    cmds:
+      - gcloud run services get-iam-policy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format=json
+
   # N8N Tasks
   deploy-n8n:
     desc: Deploy n8n workflow automation to Cloud Run

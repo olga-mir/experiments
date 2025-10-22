@@ -38,7 +38,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --gpu=1 \
     --gpu-type=nvidia-l4 \
     --max-instances=1 \
-    --memory=32Gi \
+    --memory=16Gi \
     --service-account="$SERVICE_ACCOUNT" \
     --no-cpu-throttling \
     --timeout=600 \

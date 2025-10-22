@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Run N8N & LLM Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .diagram {
+            padding: 60px 40px;
+            background: #f8f9fa;
+        }
+
+        .zone {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 5px solid;
+        }
+
+        .zone.vpc {
+            border-left-color: #4285f4;
+        }
+
+        .zone.security {
+            border-left-color: #ea4335;
+        }
+
+        .zone.services {
+            border-left-color: #34a853;
+        }
+
+        .zone-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .zone-title::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .vpc .zone-title::before { background: #4285f4; }
+        .security .zone-title::before { background: #ea4335; }
+        .services .zone-title::before { background: #34a853; }
+
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .component {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 10px;
+            padding: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .component:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        }
+
+        .component-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: white;
+        }
+
+        .icon.bastion { background: #667eea; }
+        .icon.n8n { background: #34a853; }
+        .icon.gemma { background: #fbbc04; }
+        .icon.vpc { background: #4285f4; }
+        .icon.firewall { background: #ea4335; }
+        .icon.iam { background: #ff6f00; }
+
+        .component h3 {
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+
+        .component-body {
+            color: #546e7a;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .component-body ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .component-body li {
+            margin-bottom: 5px;
+        }
+
+        .flow-section {
+            margin-top: 40px;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .flow-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .flow-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .flow-number {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+
+        .flow-content {
+            flex: 1;
+        }
+
+        .flow-content strong {
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .flow-content span {
+            color: #546e7a;
+            font-size: 0.95em;
+        }
+
+        .legend {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+        }
+
+        .arrow {
+            text-align: center;
+            color: #667eea;
+            font-size: 1.5em;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .components {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Cloud Run N8N & LLM Architecture</h1>
+            <p>Private VPC deployment with secure IAM-based authentication</p>
+        </div>
+
+        <div class="diagram">
+            <!-- VPC Network Zone -->
+            <div class="zone vpc">
+                <div class="zone-title">📡 VPC Network Infrastructure</div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon vpc">VPC</div>
+                            <h3>Custom VPC</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>Mode:</strong> Custom subnet</li>
+                                <li><strong>BGP:</strong> Regional routing</li>
+                                <li><strong>Subnet:</strong> 10.0.0.0/24</li>
+                                <li><strong>Private Google Access:</strong> Enabled</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon bastion">VM</div>
+                            <h3>Bastion Host</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>Type:</strong> e2-micro (Debian 12)</li>
+                                <li><strong>IP:</strong> Private only (no external)</li>
+                                <li><strong>Access:</strong> IAP tunnel only</li>
+                                <li><strong>Purpose:</strong> Testing & debugging</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon firewall">🔥</div>
+                            <h3>Firewall Rules</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>allow-iap-tunnel:</strong> SSH from IAP range</li>
+                                <li><strong>allow-internal-all:</strong> TCP/UDP/ICMP 10.0.0.0/8</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cloud Run Services Zone -->
+            <div class="zone services">
+                <div class="zone-title">☁️ Cloud Run Services</div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon n8n">N8N</div>
+                            <h3>N8N Workflow Service</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>Image:</strong> n8nio/n8n</li>
+                                <li><strong>Port:</strong> 5678</li>
+                                <li><strong>Memory:</strong> 2Gi</li>
+                                <li><strong>Ingress:</strong> Internal only</li>
+                                <li><strong>VPC:</strong> Connected via Direct VPC</li>
+                                <li><strong>SA:</strong> n8n-service@...</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon gemma">AI</div>
+                            <h3>Gemma LLM Service</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>Model:</strong> Gemma 3-4B (Ollama)</li>
+                                <li><strong>GPU:</strong> 1x nvidia-l4</li>
+                                <li><strong>Memory:</strong> 16Gi, 4 CPUs</li>
+                                <li><strong>Region:</strong> asia-southeast1</li>
+                                <li><strong>Ingress:</strong> Internal only</li>
+                                <li><strong>SA:</strong> gemma-service@...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security & IAM Zone -->
+            <div class="zone security">
+                <div class="zone-title">🔐 Security & IAM</div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon iam">IAM</div>
+                            <h3>Invoker Permissions</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>User → N8N:</strong> roles/run.invoker</li>
+                                <li><strong>User → Gemma:</strong> roles/run.invoker</li>
+                                <li><strong>N8N → Gemma:</strong> roles/run.invoker</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon iam">🔑</div>
+                            <h3>Service Accounts</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li><strong>n8n-service:</strong> N8N runtime identity</li>
+                                <li><strong>gemma-service:</strong> Gemma runtime identity</li>
+                                <li>Both have minimal permissions</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="component">
+                        <div class="component-header">
+                            <div class="icon iam">🛡️</div>
+                            <h3>IAP Authentication</h3>
+                        </div>
+                        <div class="component-body">
+                            <ul>
+                                <li>Identity-Aware Proxy for bastion</li>
+                                <li>No public SSH endpoints</li>
+                                <li>OS Login enabled</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Access Flow -->
+            <div class="flow-section">
+                <div class="flow-title">📋 Access Flow</div>
+
+                <div class="flow-item">
+                    <div class="flow-number">1</div>
+                    <div class="flow-content">
+                        <strong>User Access via Proxy</strong>
+                        <span>Run `task services:proxy-n8n` locally → Access http://localhost:8080 → Cloud Run proxy handles auth</span>
+                    </div>
+                </div>
+
+                <div class="flow-item">
+                    <div class="flow-number">2</div>
+                    <div class="flow-content">
+                        <strong>User Access via Bastion</strong>
+                        <span>SSH via IAP → Get identity token → Export TOKEN → curl with Bearer auth → N8N or Gemma</span>
+                    </div>
+                </div>
+
+                <div class="flow-item">
+                    <div class="flow-number">3</div>
+                    <div class="flow-content">
+                        <strong>N8N to Gemma Communication</strong>
+                        <span>N8N workflow → Get service account token → Call Gemma API with Bearer auth → LLM processing</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4285f4;"></div>
+                    <span>VPC & Networking</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #34a853;"></div>
+                    <span>Cloud Run Services</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ea4335;"></div>
+                    <span>Security & IAM</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #667eea;"></div>
+                    <span>Access Methods</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

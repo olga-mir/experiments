@@ -45,31 +45,7 @@ tasks:
       - echo "To run on bastion:"
       - echo "  ./bastion-install-tools.sh"
 
-  copy-n8n-test:
-    desc: Copy n8n test script to bastion
+  copy-test-script:
+    desc: Copy scripts to bastion
     cmds:
-      - echo "Copying test-n8n.sh to bastion..."
-      - gcloud compute scp scripts/test-n8n.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo ""
-      - echo "Script copied to bastion:~/test-n8n.sh"
-      - echo "To use on bastion:"
-      - echo "  export N8N_URL=\$$(gcloud run services describe n8n --region={{.REGION}} --format='value(status.url)')"
-      - echo "  ./test-n8n.sh"
-
-  copy-gemma-test:
-    desc: Copy gemma test script to bastion
-    cmds:
-      - echo "Copying test-gemma.sh to bastion..."
-      - gcloud compute scp scripts/test-gemma.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo ""
-      - echo "Script copied to bastion:~/test-gemma.sh"
-      - echo "To use on bastion:"
-      - echo "  export GEMMA_URL=\$$(gcloud run services describe gemma-model --region=asia-southeast1 --format='value(status.url)')"
-      - echo "  ./test-gemma.sh \"Your question here\""
-
-  copy-all-scripts:
-    desc: Copy all test scripts to bastion
-    cmds:
-      - task: copy-tools-script
-      - task: copy-n8n-test
-      - task: copy-gemma-test
+      - gcloud compute scp scripts/to-bastion-test-commands.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
