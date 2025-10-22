@@ -31,10 +31,11 @@ tasks:
   setup:
     desc: setup bastion and services
     cmds:
+      - task services:deploy-n8n &
+      - task services:deploy-gemma &
       - task bastion:setup
-      - task services:deploy-n8n
-      - gcloud compute scp bastion-tools/tools.tar.gz bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command='tar xzf tools.tar.gz && echo "export PATH=\$HOME/bin:\$PATH" >> ~/.bashrc && echo "export LD_LIBRARY_PATH=\$HOME/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc'
+      - task bastion:copy-test-scripts &
+      - task bastion:install-tools
 
   get-token:
     desc: Get identity token for authenticating to Cloud Run services

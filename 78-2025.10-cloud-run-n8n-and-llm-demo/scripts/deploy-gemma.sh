@@ -37,6 +37,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --set-env-vars=OLLAMA_NUM_PARALLEL=4 \
     --gpu=1 \
     --gpu-type=nvidia-l4 \
+    --min-instances=1 \
     --max-instances=1 \
     --memory=16Gi \
     --service-account="$SERVICE_ACCOUNT" \
@@ -47,9 +48,3 @@ gcloud run deploy "$SERVICE_NAME" \
     --ingress=internal \
     --vpc-egress=all-traffic \
     --execution-environment=gen2
-
-echo ""
-echo "Gemma model deployment completed!"
-echo ""
-echo "Get service URL with: task get-gemma-url"
-echo "Connect to bastion: task vpc:connect-bastion"

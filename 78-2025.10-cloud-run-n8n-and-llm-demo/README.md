@@ -57,12 +57,7 @@ $ task help
 
   - task bastion:setup - Create bastion host
   - task bastion:connect - SSH to bastion
-  - task bastion:delete - Remove bastion
-  - task bastion:tunnel - Create SSH tunnel (localhost:8080)
   - task bastion:copy-tools-script - Copy tools install script
-  - task bastion:copy-n8n-test - Copy n8n test script
-  - task bastion:copy-gemma-test - Copy gemma test script
-  - task bastion:copy-all-scripts - Copy all scripts at once
 
 ###  📁 tasks/services.yaml (Cloud Run services - Both n8n & gemma)
 
@@ -72,14 +67,10 @@ $ task help
   n8n:
   - task services:deploy-n8n - Deploy n8n
   - task services:get-n8n-url - Get n8n URL
-  - task services:delete-n8n - Delete n8n
-  - task services:proxy-n8n - Proxy n8n locally
 
   Gemma:
   - task services:deploy-gemma - Deploy gemma
   - task services:get-gemma-url - Get gemma URL
-  - task services:delete-gemma - Delete gemma
-  - task services:proxy-gemma - Proxy gemma locally
 
   Combined:
   - task services:deploy-all - Deploy both services

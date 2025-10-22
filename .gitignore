@@ -10,3 +10,8 @@
 
 88-2024.10-cloud-run-fortio/src/bin/
 **/v2-service.json
+
+88-2024.10-cloud-run-fortio/**
+
+# saving local files, temporary dumps and similar
+stash

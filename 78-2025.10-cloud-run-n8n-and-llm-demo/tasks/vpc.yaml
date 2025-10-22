@@ -16,6 +16,19 @@ tasks:
     cmds:
       - ./scripts/setup-network.sh
 
+  setup-egress-firewall:
+    desc: Create egress firewall rules (allow only instances with 'allow-model-access' tag)
+    cmds:
+      - ./scripts/setup-egress-firewall.sh
+
+  delete-egress-firewall:
+    desc: Delete egress firewall rules
+    cmds:
+      - echo "Deleting egress firewall rules..."
+      - gcloud compute firewall-rules delete allow-tagged-egress --project={{.PROJECT_ID}} --quiet || true
+      - gcloud compute firewall-rules delete deny-all-egress --project={{.PROJECT_ID}} --quiet || true
+      - echo "Egress firewall rules deleted"
+
   delete:
     desc: Delete VPC network infrastructure (WARNING - destructive)
     prompt: This will delete the VPC network and all associated resources. Continue?
@@ -23,6 +36,8 @@ tasks:
       - echo "Deleting firewall rules..."
       - gcloud compute firewall-rules delete allow-iap-tunnel --project={{.PROJECT_ID}} --quiet || true
       - gcloud compute firewall-rules delete allow-internal-all --project={{.PROJECT_ID}} --quiet || true
+      - gcloud compute firewall-rules delete allow-tagged-egress --project={{.PROJECT_ID}} --quiet || true
+      - gcloud compute firewall-rules delete deny-all-egress --project={{.PROJECT_ID}} --quiet || true
       - echo "Deleting subnet..."
       - gcloud compute networks subnets delete {{.SUBNETWORK}} --project={{.PROJECT_ID}} --region={{.REGION}} --quiet || true
       - echo "Deleting VPC network..."

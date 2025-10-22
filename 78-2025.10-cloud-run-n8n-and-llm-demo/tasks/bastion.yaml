@@ -35,17 +35,15 @@ tasks:
       - echo "Press Ctrl+C to stop"
       - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap -- -L 8080:localhost:8080
 
-  copy-tools-script:
-    desc: Copy network tools installation script to bastion
+  install-tools:
+    desc: Install network tools on the bastion, using local copy
     cmds:
-      - echo "Copying bastion-install-tools.sh to bastion..."
-      - gcloud compute scp scripts/bastion-install-tools.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
-      - echo ""
-      - echo "Script copied to bastion  ~/bastion-install-tools.sh"
-      - echo "To run on bastion:"
-      - echo "  ./bastion-install-tools.sh"
+      - gcloud compute scp bastion-tools/tools.tar.gz bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command='tar xzf tools.tar.gz && echo "export PATH=\$HOME/bin:\$PATH" >> ~/.bashrc && echo "export LD_LIBRARY_PATH=\$HOME/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc'
 
-  copy-test-script:
+  copy-test-scripts:
     desc: Copy scripts to bastion
     cmds:
       - gcloud compute scp scripts/to-bastion-test-commands.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - gcloud compute scp scripts/demo-cheatsheet.md bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+
