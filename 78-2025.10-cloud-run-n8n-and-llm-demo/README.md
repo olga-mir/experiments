@@ -2,12 +2,18 @@
 
 This project demonstrates deploying n8n workflow automation and LLM services on Google Cloud Run with private networking and secure access patterns.
 
+This demo was built to accompany my presentation at Google Developer Group DevFest Brisbane 2025 conference. The slides can be found [here](https://olga-mir.github.io/Public-Speaking/2025.10.25__GDG-DevFest-Brisbane__Moving-to-Cloud-Run/)
+
 ## Architecture
 
 - **VPC Network**: VPC in the same project as Cloud Run services
 - **Cloud Run Services**: Internal-only services
+- **Security**: Identity-Aware Proxy (IAP) for secure access
+
+For demo purposes only, not required for working setup:
 - **Bastion Host**: Compute Engine VM (with no public IP) for accessing Cloud Run services
-- **Security**: Identity-Aware Proxy (IAP) for secure access without external IPs
+
+<img src="./docs/demo-diagram.png" alt="demo-diagram" title="Demo Diagram" width="650px">
 
 ## Prerequisites
 
@@ -21,29 +27,7 @@ This project demonstrates deploying n8n workflow automation and LLM services on 
 
 ## Environment Setup
 
-Create a file (e.g., `.env` or `env.sh`) with the following variables and source it:
-
-```bash
-# Project where Cloud Run services and VPC are deployed
-export PROJECT_ID="your-project-id"
-export PROJECT_NAME="your-project-name"
-export PROJECT_NUMBER="your-project-number"
-
-# Network configuration
-export NETWORK="cloud-run-vpc"
-export SUBNETWORK="cloud-run-subnet"
-
-# Region and zone
-export REGION="us-central1"
-export ZONE="us-central1-b"
-
-# Your GCP user email
-export USER_EMAIL="your-email@example.com"
-
-# DNS record lives in this project (if using separate project)
-export NETWORK_PROJECT_ID=""
-export NETWORK_PROJECT_NUMBER=""
-```
+Fill [./source-template](./source-template) with your values and source it.
 
 ## Tasks
 
@@ -53,63 +37,23 @@ $ task --list
 $ task help
 ```
 
-###  📁 tasks/bastion.yaml (Frequently used - Every session)
+###  📁 tasks/services.yaml (Cloud Run services - Both n8n & gemma)
+
+  Deploy services:
+  - task services:deploy-n8n - Deploy n8n
+  - task services:deploy-gemma - Deploy gemma
+  - task services:get-gemma-url - Get gemma URL / get n8s URL
+  - task services:deploy-all - Deploy both services
+
+###  📁 tasks/bastion.yaml
 
   - task bastion:setup - Create bastion host
   - task bastion:connect - SSH to bastion
-  - task bastion:copy-tools-script - Copy tools install script
 
-###  📁 tasks/services.yaml (Cloud Run services - Both n8n & gemma)
-
-  Service Accounts:
-  - task services:setup-service-accounts - Create all service accounts
-
-  n8n:
-  - task services:deploy-n8n - Deploy n8n
-  - task services:get-n8n-url - Get n8n URL
-
-  Gemma:
-  - task services:deploy-gemma - Deploy gemma
-  - task services:get-gemma-url - Get gemma URL
-
-  Combined:
-  - task services:deploy-all - Deploy both services
-  - task services:delete-all - Delete both services
-
-###  📁 Taskfile.yaml (Main - Utility tasks only)
-
-  - `task get-token` - Get auth token
-  - `task extract-tools` - Create temp VM for tools
-
-###  📁 tasks/vpc.yaml (Rarely used - VPC only)
+###  📁 tasks/vpc.yaml (only once for VPC setup)
 
   - task vpc:setup - Create VPC network, subnets, firewall rules
   - task vpc:delete - Delete entire VPC (destructive)
-
-##  Typical Workflow
-
-```bash
-$ # On new project setup:
-$   task vpc:setup
-$
-$ # Every session:
-$   task bastion:setup
-$   task bastion:connect
-$
-$   task bastion:delete
-$
-$ # Deploy services:
-$   task services:deploy-all
-```
-
-### Access n8n Locally
-
-need to run both:
-```
-gcloud beta run services proxy n8n --region asia-southeast1 --project $PROJECT_ID
-gcloud compute ssh [BASTION_NAME] --zone=[ZONE] -- -L 8080:localhost:8080
-```
-Both have dedicated `tasks`
 
 # Network Configuration
 
@@ -146,3 +90,5 @@ If you can't connect to the bastion:
 - [Cloud Run VPC Access](https://cloud.google.com/run/docs/configuring/vpc-direct-vpc)
 - [Identity-Aware Proxy](https://cloud.google.com/iap/docs)
 - [Cloud Run Security Best Practices](https://cloud.google.com/run/docs/securing/overview)
+
+- [GDG DevFest Brisbane - Moving to Cloud Run - slidedeck](https://olga-mir.github.io/Public-Speaking/2025.10.25__GDG-DevFest-Brisbane__Moving-to-Cloud-Run/)

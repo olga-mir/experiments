@@ -1,0 +1,21 @@
+# DNS record lives in this project
+# These settings only required for exposing n8n service externally
+export NETWORK_PROJECT_ID=
+export NETWORK_PROJECT_NUMBER=
+export DOMAIN_NAME=<full-domain-name>
+export DNS_ZONE_NAME=
+
+# Below set of settings refer to project where my cloud run is deployed, VPC an subnets are also there
+export REGION=
+export ZONE=
+export NETWORK=
+export SUBNETWORK=
+export PROJECT_ID=
+export PROJECT_NUMBER=
+
+export USER_EMAIL=<user-email-gcp-account>
+
+# Cloud Run demo
+export N8N_SERVICE_NAME=n8n
+export GEMMA_SERVICE_NAME=gemma-model
+export GEMMA_REGION=$REGION
