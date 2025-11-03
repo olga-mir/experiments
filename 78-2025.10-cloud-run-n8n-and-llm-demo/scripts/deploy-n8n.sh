@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Validate required environment variables
-required_vars=("PROJECT_ID" "PROJECT_NUMBER" "REGION" "NETWORK" "SUBNETWORK")
+required_vars=("PROJECT_ID" "PROJECT_NUMBER" "REGION" "NETWORK" "SUBNETWORK" "DOMAIN_NAME")
 for var in "${required_vars[@]}"; do
     if [ -z "${!var:-}" ]; then
         echo "Error: $var environment variable is not set"
@@ -15,14 +15,7 @@ SERVICE_ACCOUNT="n8n-service@${PROJECT_ID}.iam.gserviceaccount.com"
 
 # Use custom domain if provided, otherwise use Cloud Run URL
 # For ALB setup, set DOMAIN_NAME="n8n-gdg....."
-if [ -z "${DOMAIN_NAME:-}" ]; then
-    # Default: Construct predictable Cloud Run URL using PROJECT_NUMBER format
-    # Format: https://SERVICE_NAME-PROJECT_NUMBER.REGION.run.app
-    N8N_HOST="${SERVICE_NAME}-${PROJECT_NUMBER}.${REGION}.run.app"
-else
-    # Use custom domain from ALB
-    N8N_HOST="$DOMAIN_NAME"
-fi
+N8N_HOST="$DOMAIN_NAME"
 
 N8N_URL="https://${N8N_HOST}"
 
