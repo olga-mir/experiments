@@ -2,7 +2,13 @@
 
 This project demonstrates deploying n8n workflow automation and LLM services on Google Cloud Run with private networking and secure access patterns.
 
-This demo was built to accompany my presentation at Google Developer Group DevFest Brisbane 2025 conference. The slides can be found [here](https://olga-mir.github.io/Public-Speaking/2025.10.25__GDG-DevFest-Brisbane__Moving-to-Cloud-Run/)
+This demo was built to accompany my presentation at Google Developer Group DevFest Brisbane 2025 conference.
+
+Apart from the source code in this folder, you can view slides and demo in the links below:
+
+[slides](https://olga-mir.github.io/Public-Speaking/2025.10.25__GDG-DevFest-Brisbane__Moving-to-Cloud-Run/)
+
+[demo video](https://youtu.be/RUPequlH5Kg)
 
 ## Architecture
 

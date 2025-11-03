@@ -39,12 +39,12 @@ tasks:
   show-n8n-iam:
     desc: Show current IAM policy for n8n service
     cmds:
-      - gcloud run services get-iam-policy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format=json
+      - gcloud run services get-iam-policy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format=json | jq '.bindings'
 
   show-gemma-iam:
     desc: Show current IAM policy for gemma service
     cmds:
-      - gcloud run services get-iam-policy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format=json
+      - gcloud run services get-iam-policy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format=json | jq '.bindings'
 
   # N8N Tasks
   deploy-n8n:
