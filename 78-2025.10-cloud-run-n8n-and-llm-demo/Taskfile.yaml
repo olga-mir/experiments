@@ -1,0 +1,59 @@
+version: '3'
+
+includes:
+  vpc:
+    taskfile: ./tasks/vpc.yaml
+    optional: true
+  bastion:
+    taskfile: ./tasks/bastion.yaml
+    optional: true
+  services:
+    taskfile: ./tasks/services.yaml
+    optional: true
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  PROJECT_NUMBER:
+    sh: echo "${PROJECT_NUMBER:?'PROJECT_NUMBER environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  ZONE:
+    sh: echo "${ZONE:?'ZONE environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+  USER_EMAIL:
+    sh: echo "${USER_EMAIL:?'USER_EMAIL environment variable is required'}"
+
+tasks:
+  setup:
+    desc: setup bastion and services
+    cmds:
+      - task services:deploy-n8n &
+      - task services:deploy-gemma &
+      - task bastion:setup
+      - task bastion:copy-test-scripts &
+      - task bastion:install-tools
+
+  get-token:
+    desc: Get identity token for authenticating to Cloud Run services
+    cmds:
+      - gcloud auth print-identity-token
+
+  show-config:
+    desc: Display current configuration from environment variables
+    cmds:
+      - echo "Project ID       - {{.PROJECT_ID}}"
+      - echo "Project Number   - {{.PROJECT_NUMBER}}"
+      - echo "Region           - {{.REGION}}"
+      - echo "Zone             - {{.ZONE}}"
+      - echo "Network          - {{.NETWORK}}"
+      - echo "Subnetwork       - {{.SUBNETWORK}}"
+      - echo "User Email       - {{.USER_EMAIL}}"
+
+  help:
+    desc: Show list of available tasks and their descriptions
+    cmds:
+      - task --list

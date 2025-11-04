@@ -1,0 +1,108 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  ZONE:
+    sh: echo "${ZONE:?'ZONE environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+
+  # N8N service configuration
+  N8N_SERVICE_NAME: n8n
+  N8N_SA_NAME: n8n-service
+  N8N_SERVICE_ACCOUNT: 'n8n-service@{{.PROJECT_ID}}.iam.gserviceaccount.com'
+
+  # Gemma service configuration
+  GEMMA_SERVICE_NAME: gemma-model
+  GEMMA_SA_NAME: gemma-service
+  GEMMA_SERVICE_ACCOUNT: 'gemma-service@{{.PROJECT_ID}}.iam.gserviceaccount.com'
+  GEMMA_REGION: asia-southeast1
+
+tasks:
+  # Service Accounts
+  setup-service-accounts:
+    desc: Create service accounts for all Cloud Run services
+    cmds:
+      - ./scripts/setup-service-accounts.sh
+
+  # IAM Permissions
+  setup-invoker-permissions:
+    desc: Grant invoker permissions (USER->n8n, USER->gemma, n8n->gemma)
+    cmds:
+      - ./scripts/setup-invoker-permissions.sh
+
+  show-n8n-iam:
+    desc: Show current IAM policy for n8n service
+    cmds:
+      - gcloud run services get-iam-policy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format=json | jq '.bindings'
+
+  show-gemma-iam:
+    desc: Show current IAM policy for gemma service
+    cmds:
+      - gcloud run services get-iam-policy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format=json | jq '.bindings'
+
+  # N8N Tasks
+  deploy-n8n:
+    desc: Deploy n8n workflow automation to Cloud Run
+    deps: [setup-service-accounts]
+    cmds:
+      - ./scripts/deploy-n8n.sh
+
+  get-n8n-url:
+    desc: Get n8n service URL
+    cmds:
+      - gcloud run services describe {{.N8N_SERVICE_NAME}} --region={{.REGION}} --format='value(status.url)'
+
+  delete-n8n:
+    desc: Delete n8n Cloud Run service
+    cmds:
+      - gcloud run services delete {{.N8N_SERVICE_NAME}} --region={{.REGION}} --quiet
+
+  proxy-n8n:
+    desc: Start Cloud Run proxy for n8n (access on http://localhost:8080)
+    cmds:
+      - echo "Starting Cloud Run proxy for n8n on http://localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud beta run services proxy {{.N8N_SERVICE_NAME}} --region={{.REGION}} --project={{.PROJECT_ID}} --port 8081
+
+  # Gemma Tasks
+  deploy-gemma:
+    desc: Deploy Gemma LLM model to Cloud Run
+    deps: [setup-service-accounts]
+    cmds:
+      - ./scripts/deploy-gemma.sh
+
+  get-gemma-url:
+    desc: Get gemma service URL
+    cmds:
+      - gcloud run services describe {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --format='value(status.url)'
+
+  delete-gemma:
+    desc: Delete gemma Cloud Run service
+    cmds:
+      - gcloud run services delete {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --quiet
+
+  proxy-gemma:
+    desc: Start Cloud Run proxy for gemma (access on http://localhost:8080)
+    cmds:
+      - echo "Starting Cloud Run proxy for gemma on http://localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud beta run services proxy {{.GEMMA_SERVICE_NAME}} --region={{.GEMMA_REGION}} --project={{.PROJECT_ID}}
+
+  # Combined Tasks
+  deploy-all:
+    desc: Deploy all Cloud Run services (n8n + gemma)
+    cmds:
+      - task: deploy-n8n
+      - task: deploy-gemma
+
+  delete-all:
+    desc: Delete all Cloud Run services
+    cmds:
+      - task: delete-n8n
+      - task: delete-gemma

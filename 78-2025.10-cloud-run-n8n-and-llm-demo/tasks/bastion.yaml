@@ -1,0 +1,49 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
+  ZONE:
+    sh: echo "${ZONE:?'ZONE environment variable is required'}"
+  REGION:
+    sh: echo "${REGION:?'REGION environment variable is required'}"
+  NETWORK:
+    sh: echo "${NETWORK:?'NETWORK environment variable is required'}"
+  SUBNETWORK:
+    sh: echo "${SUBNETWORK:?'SUBNETWORK environment variable is required'}"
+
+tasks:
+  setup:
+    desc: Setup bastion host with IAP access
+    cmds:
+      - ./scripts/setup-bastion.sh
+
+  connect:
+    desc: Connect to bastion host via IAP tunnel
+    cmds:
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+
+  delete:
+    desc: Delete bastion host
+    cmds:
+      - gcloud compute instances delete bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --quiet
+
+  tunnel:
+    desc: Create SSH tunnel through bastion (forwards localhost:8080)
+    cmds:
+      - echo "Creating SSH tunnel through bastion to localhost:8080"
+      - echo "Press Ctrl+C to stop"
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap -- -L 8080:localhost:8080
+
+  install-tools:
+    desc: Install network tools on the bastion, using local copy
+    cmds:
+      - gcloud compute scp bastion-tools/tools.tar.gz bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - gcloud compute ssh bastion --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap --command='tar xzf tools.tar.gz && echo "export PATH=\$HOME/bin:\$PATH" >> ~/.bashrc && echo "export LD_LIBRARY_PATH=\$HOME/lib:\$LD_LIBRARY_PATH" >> ~/.bashrc'
+
+  copy-test-scripts:
+    desc: Copy scripts to bastion
+    cmds:
+      - gcloud compute scp scripts/to-bastion-test-commands.sh bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+      - gcloud compute scp scripts/demo-cheatsheet.md bastion:~ --project={{.PROJECT_ID}} --zone={{.ZONE}} --tunnel-through-iap
+

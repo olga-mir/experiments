@@ -1,3 +1,5 @@
+**/settings.local.json
+
 *.setup-env*
 *rendered*
 
@@ -7,3 +9,9 @@
 90-2024.07-kwok-and-load-test/kwok-nodes/*
 
 88-2024.10-cloud-run-fortio/src/bin/
+**/v2-service.json
+
+88-2024.10-cloud-run-fortio/**
+
+# saving local files, temporary dumps and similar
+stash
