@@ -1,0 +1,91 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: help
+
+  help:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Create virtual environment and install dependencies
+    cmds:
+      - uv venv
+      - uv pip install -r requirements.txt
+
+  lint:
+    desc: Run linters
+    deps: [setup]
+    cmds:
+      - uv run pylint web_to_md
+
+  test:
+    desc: Run tests
+    deps: [setup]
+    cmds:
+      - uv run pytest
+
+  run:
+    desc: Run the agent locally
+    deps: [setup]
+    cmds:
+      - uv run python -m web_to_md.core.agent
+
+  deploy:
+    desc: Deploy agent to Vertex AI (Requires PROJECT_ID and PROJECT_NUMBER)
+    cmds:
+      - |
+        uv run python -m web_to_md.deployment.deploy --project $PROJECT_ID --location us-central1
+
+  logs:
+    desc: Fetch logs for a specific Reasoning Engine resource (Requires RESOURCE_ID)
+    cmds:
+      - |
+        if [ -z "$RESOURCE_ID" ]; then echo "Error: RESOURCE_ID is not set"; exit 1; fi
+        gcloud logging read 'resource.type="aiplatform.googleapis.com/ReasoningEngine" AND resource.labels.reasoning_engine_id="'$RESOURCE_ID'"' --limit 20 --project $PROJECT_ID --format="json"
+
+  verify:
+    desc: Verify a deployed agent is working (Requires RESOURCE_ID, optional TEST_URL)
+    deps: [setup]
+    cmds:
+      - |
+        if [ -z "$RESOURCE_ID" ]; then echo "Error: RESOURCE_ID is not set"; exit 1; fi
+        URL_ARG=""
+        if [ -n "$TEST_URL" ]; then URL_ARG="--url $TEST_URL"; fi
+        uv run python -m web_to_md.deployment.verify_agent --resource-id $RESOURCE_ID --project $PROJECT_ID $URL_ARG
+
+  cleanup-agents-dry-run:
+    desc: List all agents that would be deleted (dry run)
+    deps: [setup]
+    cmds:
+      - uv run python -m web_to_md.deployment.cleanup_agents --project $PROJECT_ID --location us-central1 --dry-run
+
+  cleanup-agents:
+    desc: Delete ALL reasoning engines and sessions in the project (DESTRUCTIVE!)
+    deps: [setup]
+    cmds:
+      - uv run python -m web_to_md.deployment.cleanup_agents --project $PROJECT_ID --location us-central1 --force
+
+  results-list:
+    desc: List available result sessions in GCS
+    deps: [setup]
+    cmds:
+      - uv run python -m web_to_md.deployment.download_results list
+
+  results-get:
+    desc: Download a result session from GCS (Requires FOLDER)
+    deps: [setup]
+    cmds:
+      - |
+        if [ -z "$FOLDER" ]; then echo "Error: FOLDER is not set"; exit 1; fi
+        uv run python -m web_to_md.deployment.download_results get $FOLDER
+
+  clean:
+    desc: Clean up artifacts
+    cmds:
+      - find . -type d -name "__pycache__" -exec rm -rf {} +
+      - find . -type f -name "*.pyc" -delete
+      - rm -rf .venv

@@ -39,4 +39,4 @@ javascript:(function(){var s=document.createElement('script');s.src='https://unp
 
 Works beautifully using a small model to understand and parse the page rather than programatic page parsing. Each page can be slightly different and there is a (small) chance that it may not work on some pages.
 
-This was primarily exercise in ADK and Vertex AI Agent Engine, but it was easy and does produce good results every time. Source code in `adk-converter` folder
+This was primarily exercise in ADK and Vertex AI Agent Engine, but it was easy and does produce good results every time. Source code in [adk-converter](./adk-converter) folder.
