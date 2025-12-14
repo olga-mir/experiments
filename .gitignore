@@ -1,6 +1,7 @@
 **/settings.local.json
 
 *.setup-env*
+*.setup*
 *rendered*
 
 *vmlinux.h*
@@ -17,3 +18,7 @@
 stash
 
 __pycache__/
+
+wrangler.toml
+
+.wrangler/
