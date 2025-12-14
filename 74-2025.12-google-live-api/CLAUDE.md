@@ -1,5 +1,8 @@
 # Project: Vertex AI Live Audio Transcriber
 
+## Repository Structure
+This project is part of a **monorepo** containing multiple experiments. The repository root contains shared configuration files (`.gitignore`, etc.). Each experiment directory is self-contained with its own dependencies and configuration.
+
 ## Context & Standards
 You are acting as a Senior Python Engineer. We are building a modular Python application to experiment with the **Google Vertex AI Multimodal Live API**.
 
