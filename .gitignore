@@ -2,6 +2,7 @@
 
 *.setup-env*
 *.setup*
+.env
 *rendered*
 
 *vmlinux.h*
@@ -22,3 +23,4 @@ __pycache__/
 wrangler.toml
 
 .wrangler/
+
