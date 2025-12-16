@@ -28,7 +28,7 @@ class Config:
         print(f"Using model: {self.model_id}")
 
         self.system_instruction = (
-            "You are a Principal Cloud Platform Engineer and tasked with helping your fellow Lead Engineer to grow and learn."
+            "You will be presented with technical questions in Cloud Platform space. When asked about engineering concepts try to answer with specific examples and technologies where applicable"
         )
         # Transcription prompt
         #self.system_instruction = (
@@ -98,6 +98,7 @@ class LiveSession:
         )
 
         self.session = None
+        self.audio_output_queue = asyncio.Queue()  # Queue for audio playback
 
     def get_live_config(self):
         """Return the configuration for the Live API session."""
@@ -157,20 +158,49 @@ class LiveSession:
 
                                 # Check for audio data
                                 if hasattr(part, 'inline_data') and part.inline_data:
-                                    print(f"🔍 DEBUG: Received inline_data")
                                     if hasattr(part.inline_data, 'data') and isinstance(part.inline_data.data, bytes):
                                         print(f"🔊 Audio received: {len(part.inline_data.data)} bytes")
+                                        # Queue audio for playback
+                                        self.audio_output_queue.put_nowait(part.inline_data.data)
                     else:
                         print(f"🔍 DEBUG: Response has no server_content. Available attributes: {[attr for attr in dir(response) if not attr.startswith('_')]}")
 
                 if response_count == 0:
                     print("⚠️  WARNING: Turn completed but received 0 responses")
                 else:
-                    print(f"🔍 DEBUG: Turn complete after {response_count} responses")
+                    print(f"✅ Turn complete after {response_count} responses")
+
+                # Empty the audio queue on interruption (when turn completes)
+                while not self.audio_output_queue.empty():
+                    try:
+                        self.audio_output_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
         except Exception as e:
             print(f"❌ ERROR in receive_responses: {e}")
             import traceback
             traceback.print_exc()
+
+    async def play_audio(self, pya: pyaudio.PyAudio):
+        """Play audio responses through the speakers."""
+        # Output stream: 24kHz, 16-bit PCM (as per Live API spec)
+        stream = await asyncio.to_thread(
+            pya.open,
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=24000,  # Live API outputs 24kHz audio
+            output=True,
+        )
+        print("🔊 Audio playback started")
+
+        try:
+            while True:
+                audio_data = await self.audio_output_queue.get()
+                await asyncio.to_thread(stream.write, audio_data)
+        except Exception as e:
+            print(f"❌ Error in audio playback: {e}")
+        finally:
+            stream.close()
 
     async def connect_and_run(self, audio_recorder: AudioRecorder):
         """Connect to the Live API and run the transcription loop."""
@@ -186,6 +216,7 @@ class LiveSession:
                 tg.create_task(audio_recorder.capture_audio())
                 tg.create_task(self.send_audio(audio_recorder.audio_queue))
                 tg.create_task(self.receive_responses())
+                tg.create_task(self.play_audio(audio_recorder.pya))
 
 
 async def main():
