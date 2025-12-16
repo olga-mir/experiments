@@ -1,0 +1,37 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: Install system dependencies and sync Python packages
+    cmds:
+      - |
+        if ! command -v brew &> /dev/null; then
+          echo "Homebrew not found. Please install Homebrew first."
+          exit 1
+        fi
+      - |
+        if ! brew list portaudio &> /dev/null; then
+          echo "Installing portaudio..."
+          brew install portaudio
+        else
+          echo "portaudio already installed"
+        fi
+      - uv sync
+
+  run:
+    desc: Run the audio transcriber application
+    deps: [setup]
+    cmds:
+      - uv run python src/main.py
+
+  lint:
+    desc: Run basic linting checks
+    cmds:
+      - uv run ruff check src/ || echo "Install ruff with 'uv add --dev ruff' to enable linting"
+
+  clean:
+    desc: Clean up generated files and caches
+    cmds:
+      - rm -rf .venv
+      - rm -rf __pycache__ src/__pycache__
+      - find . -type f -name "*.pyc" -delete
