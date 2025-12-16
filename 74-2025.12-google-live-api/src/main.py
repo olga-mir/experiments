@@ -10,17 +10,18 @@ import pyaudio
 from dotenv import load_dotenv
 from google import genai
 
-# Load environment variables
 load_dotenv()
 
-
+# https://ai.google.dev/gemini-api/docs/live?example=mic-stream
 class Config:
     """Configuration loaded from environment variables."""
 
     def __init__(self):
+        # Vertex AI Configuration
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "")
         self.region = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
-        self.model_id = os.getenv("MODEL_ID", "gemini-2.0-flash-exp")
+
+        self.model_id = os.getenv("MODEL_ID", "gemini-live-2.5-flash-native-audio")
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "1024"))
         self.sample_rate = int(os.getenv("SAMPLE_RATE", "16000"))
 
@@ -83,11 +84,14 @@ class LiveSession:
 
     def __init__(self, config: Config):
         self.config = config
+
+        # Initialize Vertex AI client
         self.client = genai.Client(
             vertexai=True,
             project=config.project_id,
             location=config.region,
         )
+
         self.session = None
 
     def get_live_config(self):
@@ -120,7 +124,7 @@ class LiveSession:
             config=self.get_live_config(),
         ) as session:
             self.session = session
-            print(f"✅ Connected to {self.config.model_id}")
+            print(f"✅ Connected to {self.config.model_id} via Vertex AI")
             print("🎙️  Start speaking... (Ctrl+C to stop)\n")
 
             async with asyncio.TaskGroup() as tg:
@@ -138,6 +142,8 @@ async def main():
         print("❌ Error: GOOGLE_CLOUD_PROJECT environment variable not set.")
         print("   Please copy .env.example to .env and configure it.")
         sys.exit(1)
+
+    print(f"🔧 Using Vertex AI (Project: {config.project_id}, Region: {config.region})")
 
     audio_recorder = AudioRecorder(config)
     live_session = LiveSession(config)
