@@ -14,8 +14,8 @@
     try {
         // 1. Load Readability (cleans the page) and Turndown (converts to MD)
         await loadScript('https://unpkg.com/@mozilla/readability@0.5.0/Readability.js');
-        await loadScript('https://unpkg.com/turndown/dist/turndown.js');
-        await loadScript('https://unpkg.com/turndown-plugin-gfm/dist/turndown-plugin-gfm.js');
+        await loadScript('https://unpkg.com/turndown@7.1.2/dist/turndown.js');
+        await loadScript('https://unpkg.com/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js');
 
         console.log("✅ Libraries loaded. Parsing content...");
 
@@ -34,8 +34,8 @@
         });
 
         // Add GitHub Flavored Markdown (better tables & task lists)
-        const gfm = turndownPluginGfm.gfm;
-        turndownService.use(gfm);
+        turndownService.use(turndownPluginGfm.tables);
+        turndownService.use(turndownPluginGfm.strikethrough);
 
         // 4. Convert to Markdown
         // We add the Title and URL at the top for context
