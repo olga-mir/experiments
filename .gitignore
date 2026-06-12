@@ -17,6 +17,7 @@
 
 # saving local files, temporary dumps and similar
 stash
+local-stash/
 
 __pycache__/
 
