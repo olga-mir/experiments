@@ -1,0 +1,7 @@
+__pycache__
+.venv
+.git
+.python-version
+openspec
+Taskfile.yml
+README.md

@@ -1,22 +1,11 @@
 version: '3'
 
-vars:
-  PROJECT_ID:
-    sh: gcloud config get-value project
-  PROJECT_NUMBER:
-    sh: gcloud projects describe {{.PROJECT_ID}} --format='value(projectNumber)'
-
 tasks:
   preflight:
     desc: Check required environment variables and tools
     cmds:
       - uv --version || (echo "uv is required. Install from https://github.com/astral-sh/uv" && exit 1)
       - gcloud version || (echo "gcloud is required." && exit 1)
-      - |
-        if [ -z "$PROJECT_ID" ]; then
-          echo "Error: PROJECT_ID environment variable is missing."
-          exit 1
-        fi
       - echo "Preflight checks passed."
 
   init:
@@ -29,3 +18,17 @@ tasks:
     desc: Run the server locally
     cmds:
       - uv run uvicorn main:app --reload --port 8000
+
+  deploy:
+    desc: Deploy the service to Cloud Run using GCP_PROJECT_ID
+    preconditions:
+      - sh: '[[ -n "$GCP_PROJECT_ID" ]]'
+        msg: "Error: GCP_PROJECT_ID environment variable must be set (e.g., GCP_PROJECT_ID=my-project task deploy)"
+    cmds:
+      - |
+        gcloud run deploy mock-transcript-server \
+          --source . \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --project $GCP_PROJECT_ID \
+          --quiet
