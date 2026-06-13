@@ -1,0 +1,8 @@
+[
+  {"speaker": "Narrator", "text": "Welcome to the Google SRE Podcast. Today we are talking about reliability."},
+  {"speaker": "Alice", "text": "Thanks for having me! Reliability is all about ensuring our systems meet user expectations."},
+  {"speaker": "Bob", "text": "Absolutely. It starts with setting clear Service Level Objectives (SLOs)."},
+  {"speaker": "Alice", "text": "Yes, and monitoring the right SLIs so we know when we are burning our error budget."},
+  {"speaker": "Bob", "text": "Once the budget is depleted, we need to pause new features and focus on stability."},
+  {"speaker": "Narrator", "text": "That's all the time we have for today. Thank you both for joining us!"}
+]
