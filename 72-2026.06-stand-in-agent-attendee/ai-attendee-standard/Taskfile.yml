@@ -1,8 +1,8 @@
 version: '3'
 
 vars:
-  PROJECT_ID:
-    sh: gcloud config get-value project 2>/dev/null || echo $GOOGLE_CLOUD_PROJECT
+  GCP_PROJECT_ID: '{{.Env.GCP_PROJECT_ID}}'
+  BUCKET_NAME: '{{.Env.SCREENSHOTS_BUCKET_NAME | default (printf "%s-ai-attendee" .Env.GCP_PROJECT_ID)}}'
 
 tasks:
   preflight:
@@ -10,17 +10,20 @@ tasks:
     cmds:
       - |
         ERRORS=0
-        if [ -z "{{.PROJECT_ID}}" ]; then
-          echo "❌ GOOGLE_CLOUD_PROJECT is not set and gcloud is not configured"
+        if [ -z "{{.GCP_PROJECT_ID}}" ]; then
+          echo "❌ GCP_PROJECT_ID environment variable must be set"
           ERRORS=$((ERRORS+1))
-        fi
-        if [ -z "$SCREENSHOTS_BUCKET_NAME" ]; then
-          echo "⚠️  SCREENSHOTS_BUCKET_NAME is not set (screenshots will fail)"
         fi
         if [ "$ERRORS" -gt 0 ]; then
           exit 1
         fi
-        echo "✅ Preflight checks passed (Project: {{.PROJECT_ID}})"
+        echo "✅ Preflight checks passed (Project: {{.GCP_PROJECT_ID}})"
+
+  setup-infra:
+    desc: Provision GCP infrastructure (idempotent)
+    deps: [preflight]
+    cmds:
+      - bash ./scripts/setup-infra.sh {{.GCP_PROJECT_ID}} {{.BUCKET_NAME}}
 
   install:
     desc: Install dependencies

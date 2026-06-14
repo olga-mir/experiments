@@ -1,5 +1,6 @@
 # Use a multi-stage build to keep the final image small
-FROM ghcr.io/astral-sh/uv:python3.14-slim AS builder
+FROM python:3.14-slim-bookworm AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Set the working directory
 WORKDIR /app
