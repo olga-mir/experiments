@@ -58,12 +58,40 @@ tasks:
       - uv run python app/fast_api_app.py
 
   trigger:ambient:
-    desc: Locally trigger the ambient agent (simulates Pub/Sub)
+    desc: Locally trigger the ambient agent via Webhook (simulates Cron)
     cmds:
       - |
-        curl -X POST http://localhost:8000/apps/ambient_ai_attendee/trigger/pubsub \
+        curl -X POST http://localhost:8000/apps/ambient_ai_attendee/trigger/webhook \
           -H "Content-Type: application/json" \
-          -d '{"data": "eyAidGltZSI6ICJub3ciIH0=", "attributes": {"type": "periodic-check"}}'
+          -d '{"message": "tick"}'
+
+  deploy:
+    desc: Deploy both agents to GCP Agent Platform (Agent Runtime)
+    deps: [preflight]
+    cmds:
+      - agents-cli deploy
+
+  schedule:ambient:
+    desc: Schedule the ambient agent to run every 5 minutes using Cloud Scheduler
+    deps: [preflight]
+    vars:
+      AGENT_URL:
+        sh: agents-cli deploy --list --format json | jq -r '.[0].url' 2>/dev/null || echo "<YOUR_AGENT_URL>"
+      SVC_ACCT:
+        sh: gcloud config get-value account 2>/dev/null
+    cmds:
+      - |
+        if [ "{{.AGENT_URL}}" == "<YOUR_AGENT_URL>" ]; then
+          echo "❌ Could not auto-detect Agent URL. Please deploy first or provide AGENT_URL manually."
+          exit 1
+        fi
+        gcloud scheduler jobs create http ambient-cron \
+          --schedule="*/5 * * * *" \
+          --uri="{{.AGENT_URL}}/apps/ambient_ai_attendee/trigger/webhook" \
+          --http-method=POST \
+          --message-body='{"tick": "true"}' \
+          --oidc-service-account-email="{{.SVC_ACCT}}" \
+          --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
 
   eval:
     desc: Run evaluations
