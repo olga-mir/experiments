@@ -1,29 +1,21 @@
 version: '3'
 
 vars:
-  GCP_PROJECT_ID: '{{.Env.GCP_PROJECT_ID}}'
-  BUCKET_NAME: '{{.Env.SCREENSHOTS_BUCKET_NAME | default (printf "%s-ai-attendee" .Env.GCP_PROJECT_ID)}}'
+  GCP_PROJECT_ID: $GCP_PROJECT_ID
+  BUCKET_NAME: $SCREENSHOTS_BUCKET_NAME
 
 tasks:
   preflight:
     desc: Check required environment variables
-    cmds:
-      - |
-        ERRORS=0
-        if [ -z "{{.GCP_PROJECT_ID}}" ]; then
-          echo "❌ GCP_PROJECT_ID environment variable must be set"
-          ERRORS=$((ERRORS+1))
-        fi
-        if [ "$ERRORS" -gt 0 ]; then
-          exit 1
-        fi
-        echo "✅ Preflight checks passed (Project: {{.GCP_PROJECT_ID}})"
+    preconditions:
+      - sh: '[[ -n "$GCP_PROJECT_ID" ]]'
+        msg: "Error: GCP_PROJECT_ID environment variable must be set"
 
   setup-infra:
     desc: Provision GCP infrastructure (idempotent)
     deps: [preflight]
     cmds:
-      - bash ./scripts/setup-infra.sh {{.GCP_PROJECT_ID}} {{.BUCKET_NAME}}
+      - bash ./scripts/setup-infra.sh $GCP_PROJECT_ID $SCREENSHOTS_BUCKET_NAME
 
   install:
     desc: Install dependencies
@@ -45,5 +37,8 @@ tasks:
   deploy:
     desc: Deploy the standard agent to GCP Agent Platform
     deps: [preflight]
+    preconditions:
+      - sh: '[[ -n "$SIMULATION_BASE_URL" ]]'
+        msg: "Error: SIMULATION_BASE_URL must be set (e.g. the Cloud Run URL of the backend sim)"
     cmds:
-      - agents-cli deploy
+      - agents-cli deploy --project $GCP_PROJECT_ID
