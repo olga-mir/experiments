@@ -1,0 +1,110 @@
+version: '3'
+
+vars:
+  PROJECT_ID:
+    sh: gcloud config get-value project 2>/dev/null || echo $GOOGLE_CLOUD_PROJECT
+
+tasks:
+  preflight:
+    desc: Check required environment variables
+    cmds:
+      - |
+        ERRORS=0
+        if [ -z "{{.PROJECT_ID}}" ]; then
+          echo "❌ GOOGLE_CLOUD_PROJECT is not set and gcloud is not configured"
+          ERRORS=$((ERRORS+1))
+        fi
+        if [ -z "$SCREENSHOTS_BUCKET_NAME" ]; then
+          echo "⚠️  SCREENSHOTS_BUCKET_NAME is not set (screenshots will fail)"
+        fi
+        if [ "$ERRORS" -gt 0 ]; then
+          exit 1
+        fi
+        echo "✅ Preflight checks passed (Project: {{.PROJECT_ID}})"
+
+  install:
+    desc: Install dependencies
+    cmds:
+      - agents-cli install
+
+  run:
+    desc: Run the ambient agent (one-off prompt)
+    deps: [preflight]
+    cmds:
+      - agents-cli run "{{.CLI_ARGS | default "Perform a sweep of the conference"}}"
+
+  playground:
+    desc: Open the ambient agent playground
+    deps: [preflight]
+    cmds:
+      - agents-cli playground
+
+  server:
+    desc: Run the FastAPI server locally (enables triggers)
+    deps: [preflight]
+    cmds:
+      - uv run python app/fast_api_app.py
+
+  trigger:
+    desc: Locally trigger the ambient agent via Webhook (simulates Cron)
+    cmds:
+      - |
+        curl -X POST http://localhost:8000/apps/ambient_ai_attendee/trigger/webhook \
+          -H "Content-Type: application/json" \
+          -d '{"message": "tick"}'
+
+  deploy:
+    desc: Deploy the ambient agent to GCP Agent Platform
+    deps: [preflight]
+    cmds:
+      - agents-cli deploy
+
+  setup:infra:
+    desc: Set up Service Account and IAM roles for Cloud Scheduler
+    deps: [preflight]
+    vars:
+      SA_NAME: "ambient-attendee-scheduler"
+      SA_EMAIL: "{{.SA_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
+    cmds:
+      - |
+        if ! gcloud iam service-accounts describe {{.SA_EMAIL}} >/dev/null 2>&1; then
+          echo "Creating service account {{.SA_EMAIL}}..."
+          gcloud iam service-accounts create {{.SA_NAME}} --display-name="Ambient Attendee Scheduler"
+        fi
+        echo "Granting Reasoning Engine User role to {{.SA_EMAIL}}..."
+        gcloud projects add-iam-policy-binding {{.PROJECT_ID}} \
+          --member="serviceAccount:{{.SA_EMAIL}}" \
+          --role="roles/aiplatform.user"
+
+  schedule:
+    desc: Schedule the ambient agent to run every 5 minutes using Cloud Scheduler
+    deps: [preflight]
+    vars:
+      SA_EMAIL: "ambient-attendee-scheduler@{{.PROJECT_ID}}.iam.gserviceaccount.com"
+    cmds:
+      - |
+        if [ -z "$AGENT_URL" ]; then
+          echo "❌ AGENT_URL environment variable is not set."
+          echo "Usage: AGENT_URL=https://... task schedule"
+          exit 1
+        fi
+        # Check if job exists, if so update, otherwise create
+        if gcloud scheduler jobs describe ambient-cron --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}" >/dev/null 2>&1; then
+          echo "Updating existing scheduler job..."
+          gcloud scheduler jobs update http ambient-cron \
+            --schedule="*/5 * * * *" \
+            --uri="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --http-method=POST \
+            --message-body='{"tick": "true"}' \
+            --oidc-service-account-email="{{.SA_EMAIL}}" \
+            --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
+        else
+          echo "Creating new scheduler job..."
+          gcloud scheduler jobs create http ambient-cron \
+            --schedule="*/5 * * * *" \
+            --uri="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --http-method=POST \
+            --message-body='{"tick": "true"}' \
+            --oidc-service-account-email="{{.SA_EMAIL}}" \
+            --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
+        fi
