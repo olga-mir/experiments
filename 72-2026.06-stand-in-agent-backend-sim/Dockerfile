@@ -1,5 +1,5 @@
 # Use a multi-stage build to keep the final image small
-FROM ghcr.io/astral-sh/uv:python3.14-alpine AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-slim AS builder
 
 # Set the working directory
 WORKDIR /app

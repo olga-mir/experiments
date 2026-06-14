@@ -32,3 +32,29 @@ tasks:
           --allow-unauthenticated \
           --project $GCP_PROJECT_ID \
           --quiet
+
+  setup-infra:
+    desc: Enable required GCP APIs and setup IAM permissions for Cloud Run / Cloud Build
+    preconditions:
+      - sh: '[[ -n "$GCP_PROJECT_ID" ]]'
+        msg: "Error: GCP_PROJECT_ID environment variable must be set (e.g., GCP_PROJECT_ID=my-project task setup-infra)"
+    cmds:
+      - echo "Enabling required APIs..."
+      - |
+        gcloud services enable \
+          run.googleapis.com \
+          cloudbuild.googleapis.com \
+          artifactregistry.googleapis.com \
+          storage.googleapis.com \
+          --project $GCP_PROJECT_ID
+      - echo "Configuring default Compute service account permissions..."
+      - |
+        PROJECT_NUMBER=$(gcloud projects describe $GCP_PROJECT_ID --format="value(projectNumber)")
+        SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+        for role in roles/logging.logWriter roles/storage.objectViewer roles/artifactregistry.writer; do
+          gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+            --member="serviceAccount:${SA_EMAIL}" \
+            --role="${role}" \
+            --quiet
+        done
+
