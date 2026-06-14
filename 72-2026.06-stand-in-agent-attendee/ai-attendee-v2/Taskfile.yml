@@ -27,17 +27,43 @@ tasks:
     cmds:
       - agents-cli install
 
-  run:
-    desc: Run the agent (one-off prompt)
+  run:standard:
+    desc: Run the standard agent (one-off prompt)
     deps: [preflight]
     cmds:
-      - agents-cli run "{{.CLI_ARGS | default "Hello"}}"
+      - agents-cli run --app-name ai_engineer_attendee "{{.CLI_ARGS | default "Check current conference status"}}"
 
-  playground:
-    desc: Open the agent playground
+  run:ambient:
+    desc: Run the ambient agent (one-off prompt)
     deps: [preflight]
     cmds:
-      - agents-cli playground
+      - agents-cli run --app-name ambient_ai_attendee "{{.CLI_ARGS | default "Perform a sweep of the conference"}}"
+
+  playground:standard:
+    desc: Open the standard agent playground
+    deps: [preflight]
+    cmds:
+      - agents-cli playground --app-name ai_engineer_attendee
+
+  playground:ambient:
+    desc: Open the ambient agent playground
+    deps: [preflight]
+    cmds:
+      - agents-cli playground --app-name ambient_ai_attendee
+
+  server:
+    desc: Run the FastAPI server locally (enables triggers)
+    deps: [preflight]
+    cmds:
+      - uv run python app/fast_api_app.py
+
+  trigger:ambient:
+    desc: Locally trigger the ambient agent (simulates Pub/Sub)
+    cmds:
+      - |
+        curl -X POST http://localhost:8000/apps/ambient_ai_attendee/trigger/pubsub \
+          -H "Content-Type: application/json" \
+          -d '{"data": "eyAidGltZSI6ICJub3ciIH0=", "attributes": {"type": "periodic-check"}}'
 
   eval:
     desc: Run evaluations

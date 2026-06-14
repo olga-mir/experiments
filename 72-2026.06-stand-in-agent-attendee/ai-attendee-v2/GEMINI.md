@@ -34,8 +34,12 @@ Ask the user: Option A (simple single-project) or Option B (full CI/CD pipeline 
 | Command | Purpose |
 |---------|---------|
 | `task preflight` | Check required environment variables |
-| `task run -- "prompt"` | Run agent with a single prompt |
-| `task playground` | Interactive local testing |
+| `task run:standard` | Run the standard agent with a prompt |
+| `task run:ambient` | Run the ambient agent with a prompt |
+| `task playground:standard` | Interactive testing for standard agent |
+| `task playground:ambient` | Interactive testing for ambient agent |
+| `task server` | Run FastAPI server locally (enables triggers) |
+| `task trigger:ambient`| Locally trigger the ambient agent |
 | `task eval` | Run evaluation against evalsets |
 
 ## Environment Variables
