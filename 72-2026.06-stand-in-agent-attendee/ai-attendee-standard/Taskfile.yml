@@ -41,4 +41,4 @@ tasks:
       - sh: '[[ -n "$SIMULATION_BASE_URL" ]]'
         msg: "Error: SIMULATION_BASE_URL must be set (e.g. the Cloud Run URL of the backend sim)"
     cmds:
-      - agents-cli deploy --project $GCP_PROJECT_ID
+      - agents-cli deploy --project $GCP_PROJECT_ID --update-env-vars SIMULATION_BASE_URL=$SIMULATION_BASE_URL
