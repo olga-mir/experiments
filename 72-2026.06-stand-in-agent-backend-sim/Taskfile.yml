@@ -33,6 +33,34 @@ tasks:
           --project $GCP_PROJECT_ID \
           --quiet
 
+  sim-start:
+    desc: Start the simulation at real-time speed (use SIM_URL=http://localhost:8000 or the Cloud Run URL)
+    vars:
+      URL: '{{.SIM_URL | default "http://localhost:8000"}}'
+    cmds:
+      - curl -s -X POST "{{.URL}}/sim/start" | python3 -m json.tool
+
+  sim-start-fast:
+    desc: Start the simulation at 60x speed (1 min of content per real second — useful for testing)
+    vars:
+      URL: '{{.SIM_URL | default "http://localhost:8000"}}'
+    cmds:
+      - curl -s -X POST "{{.URL}}/sim/start?speed=60" | python3 -m json.tool
+
+  sim-reset:
+    desc: Reset the simulation back to idle
+    vars:
+      URL: '{{.SIM_URL | default "http://localhost:8000"}}'
+    cmds:
+      - curl -s -X POST "{{.URL}}/sim/reset" | python3 -m json.tool
+
+  sim-status:
+    desc: Check current simulation status
+    vars:
+      URL: '{{.SIM_URL | default "http://localhost:8000"}}'
+    cmds:
+      - curl -s "{{.URL}}/streams" | python3 -m json.tool
+
   setup-infra:
     desc: Enable required GCP APIs and setup IAM permissions for Cloud Run / Cloud Build
     preconditions:
