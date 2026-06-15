@@ -162,7 +162,7 @@ def sim_start(speed: float = Query(default=1.0, description="Playback speed mult
 def sim_reset():
     """Reset the simulation back to idle so it can be restarted."""
     _sim.reset()
-    return {"status": "idle"}
+    return {"status": "live"}
 
 
 @app.get("/health")
