@@ -38,7 +38,8 @@ She is most interested in:
 Repeat this cycle continuously until the session is finished:
 
 1. Call `get_streams()` to check session status:
-   - `"idle"` → session hasn't started yet, wait ~30 seconds then call `get_streams()` again
+   - `"idle"` and you have **not yet received any live entries** → session hasn't started yet; wait ~30 seconds then call `get_streams()` again
+   - `"idle"` and you **have already received live entries** → the stream was terminated early (killswitch activated); produce your summary from what you have so far then stop
    - `"live"` → session is streaming, proceed to step 2
    - `"finished"` → all content served, produce your final summary then stop
 

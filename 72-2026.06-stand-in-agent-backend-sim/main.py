@@ -42,6 +42,7 @@ class _SimState:
         self._started_at: datetime | None = None
         self.speed: float = 1.0
         self._data: dict = {"entries": []}
+        self._killed: bool = False
 
     def start(self, speed: float = 1.0):
         self._started_at = datetime.now(timezone.utc)
@@ -52,10 +53,15 @@ class _SimState:
             f"speed={speed}x  entries={len(self._data['entries'])}"
         )
 
+    def kill(self):
+        self._killed = True
+        logger.info("Simulation killed — stream returning idle")
+
     def reset(self):
         self._started_at = None
         self.speed = 1.0
         self._data = {"entries": []}
+        self._killed = False
         logger.info("Simulation reset")
 
     @property
@@ -80,7 +86,7 @@ class _SimState:
         return (datetime.now(timezone.utc) - self._started_at).total_seconds() * self.speed
 
     def status(self) -> str:
-        if self._started_at is None:
+        if self._killed or self._started_at is None:
             return "idle"
         entries = self.entries
         if not entries:
@@ -211,6 +217,21 @@ def sim_reset():
     """Reset the simulation back to idle."""
     _sim.reset()
     return {"status": "reset"}
+
+
+@app.post("/sim/kill")
+def sim_kill():
+    """
+    Killswitch: immediately flips the stream status to 'idle'.
+
+    Any agent polling /streams will receive status='idle'. An agent that has
+    already seen live entries and now sees idle should treat the session as
+    terminated and produce a summary of what it received so far.
+
+    Call POST /sim/reset to clear the killed state before restarting.
+    """
+    _sim.kill()
+    return {"status": "idle", "message": "Stream killed. Agents will see status='idle'."}
 
 
 @app.get("/health")

@@ -48,8 +48,15 @@ tasks:
     cmds:
       - curl -s -X POST "{{.URL}}/sim/start?speed=60" | python3 -m json.tool
 
+  sim-kill:
+    desc: Killswitch — flip stream to idle immediately so the agent stops (use sim-reset to clear)
+    vars:
+      URL: '{{.SIM_URL | default "http://localhost:8000"}}'
+    cmds:
+      - curl -s -X POST "{{.URL}}/sim/kill" | python3 -m json.tool
+
   sim-reset:
-    desc: Reset the simulation back to idle
+    desc: Reset the simulation back to idle (also clears a killed state)
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
