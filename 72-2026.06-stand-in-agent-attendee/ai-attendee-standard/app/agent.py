@@ -1,13 +1,15 @@
 # Copyright 2026 Google LLC
 import datetime
 
+import sys
+
 # Monkey-patch to bypass the ADK app name validation bug in Vertex AI Agent Engine
 try:
     import google.adk.apps.app as adk_app
     adk_app.validate_app_name = lambda name: None
-    print("✅ Successfully monkey-patched google.adk app name validation")
+    print("✅ Successfully monkey-patched google.adk app name validation", file=sys.stderr)
 except Exception as e:
-    print(f"⚠️ Failed to monkey-patch google.adk app name validation: {e}")
+    print(f"⚠️ Failed to monkey-patch google.adk app name validation: {e}", file=sys.stderr)
 
 from google.adk.agents import Agent
 from google.adk.tools import FunctionTool
@@ -30,7 +32,7 @@ try:
     from shared_tools import get_github_mcp_toolset
     github_toolset = get_github_mcp_toolset()
 except Exception as e:
-    print(f"⚠️ Warning: Could not initialize GitHub MCP toolset: {e}")
+    print(f"⚠️ Warning: Could not initialize GitHub MCP toolset: {e}", file=sys.stderr)
     github_toolset = None
 
 SYSTEM_INSTRUCTIONS = f"""You are an AI agent attending {config.conference_name}
