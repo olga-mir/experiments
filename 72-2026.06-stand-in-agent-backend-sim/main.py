@@ -1,22 +1,17 @@
-import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import AsyncGenerator
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("mock-streaming-server")
+logger = logging.getLogger("mock-transcript-server")
 
 app = FastAPI(
-    title="Mock Transcript Streaming Server",
-    description="Simulates a streaming podcast transcript backend via SSE"
+    title="Mock Transcript Server",
+    description="Serves a conference transcript as a JSON array of {ts, text} entries"
 )
 
-# Enable CORS for ingestion clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,47 +35,21 @@ def load_transcript() -> list:
         return []
 
 
-async def event_generator(delay: float) -> AsyncGenerator[str, None]:
-    chunks = load_transcript()
-    if not chunks:
-        logger.warning("No transcript chunks to stream. Closing connection immediately.")
-        return
-
-    logger.info(f"Started streaming transcript ({len(chunks)} chunks, delay={delay}s).")
-    try:
-        for idx, chunk in enumerate(chunks):
-            # Send SSE event format
-            yield f"data: {json.dumps(chunk)}\n\n"
-            # Wait for next chunk (unless it's the last one)
-            if idx < len(chunks) - 1:
-                await asyncio.sleep(delay)
-    except asyncio.CancelledError:
-        logger.info("Client connection closed/cancelled midway.")
-        raise
-    except Exception as e:
-        logger.error(f"Error during streaming: {e}")
-    finally:
-        logger.info("Finished streaming transcript.")
-
-
-@app.get("/stream")
-async def stream_transcript(
-    delay: float = Query(default=30.0, description="Delay between chunks in seconds", ge=0.0)
+@app.get("/transcript")
+def get_transcript(
+    since: str = Query(default="", description="ISO 8601 timestamp; return only entries after this time")
 ):
     """
-    Exposes a Server-Sent Events (SSE) endpoint to stream podcast transcript chunks sequentially.
+    Returns transcript entries as a JSON array of {ts, text} objects.
+    Use ?since=<ISO8601> to get only entries after a given timestamp (for incremental polling).
+    Timestamps compare lexicographically so plain string comparison works for UTC/Z-suffixed values.
     """
-    return StreamingResponse(
-        event_generator(delay),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable buffering in Nginx reverse proxies
-        }
-    )
+    entries = load_transcript()
+    if since:
+        entries = [e for e in entries if e.get("ts", "") > since]
+    return entries
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "chunks_loaded": len(load_transcript())}
+    return {"status": "ok", "total_entries": len(load_transcript())}

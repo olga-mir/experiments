@@ -1,8 +1,17 @@
 [
-  {"speaker": "Narrator", "text": "Welcome to the Google SRE Podcast. Today we are talking about reliability."},
-  {"speaker": "Alice", "text": "Thanks for having me! Reliability is all about ensuring our systems meet user expectations."},
-  {"speaker": "Bob", "text": "Absolutely. It starts with setting clear Service Level Objectives (SLOs)."},
-  {"speaker": "Alice", "text": "Yes, and monitoring the right SLIs so we know when we are burning our error budget."},
-  {"speaker": "Bob", "text": "Once the budget is depleted, we need to pause new features and focus on stability."},
-  {"speaker": "Narrator", "text": "That's all the time we have for today. Thank you both for joining us!"}
+  {"ts": "2026-06-03T09:00:01.000Z", "text": "Welcome to the Google SRE Podcast."},
+  {"ts": "2026-06-03T09:00:04.200Z", "text": "Today we are talking about reliability."},
+  {"ts": "2026-06-03T09:00:08.500Z", "text": "Thanks for having me!"},
+  {"ts": "2026-06-03T09:00:10.100Z", "text": "Reliability is all about"},
+  {"ts": "2026-06-03T09:00:12.300Z", "text": "ensuring our systems meet user expectations."},
+  {"ts": "2026-06-03T09:00:16.000Z", "text": "Absolutely. It starts with setting"},
+  {"ts": "2026-06-03T09:00:18.400Z", "text": "clear Service Level Objectives, or SLOs."},
+  {"ts": "2026-06-03T09:00:22.700Z", "text": "Yes, and monitoring the right SLIs"},
+  {"ts": "2026-06-03T09:00:25.100Z", "text": "so we know when we are burning"},
+  {"ts": "2026-06-03T09:00:27.300Z", "text": "our error budget."},
+  {"ts": "2026-06-03T09:00:30.500Z", "text": "Once the budget is depleted,"},
+  {"ts": "2026-06-03T09:00:32.800Z", "text": "we need to pause new features"},
+  {"ts": "2026-06-03T09:00:34.900Z", "text": "and focus on stability."},
+  {"ts": "2026-06-03T09:00:38.200Z", "text": "That's all the time we have for today."},
+  {"ts": "2026-06-03T09:00:41.000Z", "text": "Thank you both for joining us!"}
 ]

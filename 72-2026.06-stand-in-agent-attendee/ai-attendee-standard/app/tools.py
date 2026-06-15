@@ -172,6 +172,33 @@ def checkin(note: str = "") -> dict:
         return {"error": str(e)}
 
 
+def get_sim_transcript(since: str = "") -> dict:
+    """Fetches transcript entries from the simulator.
+
+    Returns a JSON array of {ts, text} objects. Pass `since` to get only
+    entries after a given timestamp (useful for incremental polling).
+
+    Args:
+        since: ISO 8601 timestamp (e.g. '2026-06-03T09:00:10.000Z'); omit to get all entries
+    """
+    sim_url = config.simulation_base_url
+    if not sim_url:
+        return {"error": "SIMULATION_BASE_URL not configured. Set SIMULATION_BASE_URL in .setup-env."}
+
+    url = f"{sim_url}/transcript"
+    if since:
+        url += f"?since={urllib.parse.quote(since)}"
+
+    status, body = _get(url)
+    if status != 200:
+        return {"error": body}
+    try:
+        entries = json.loads(body)
+        return {"entries": entries, "total": len(entries)}
+    except Exception:
+        return {"raw": body}
+
+
 def save_screenshot_to_bucket(stream_id: str) -> dict:
     """Downloads the current live screenshot for the given stream and uploads it to the configured Google Cloud Storage bucket.
 

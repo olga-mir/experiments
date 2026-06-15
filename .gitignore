@@ -1,4 +1,5 @@
 **/settings.local.json
+deployment_metadata.json
 
 *.setup-env*
 *.setup*
