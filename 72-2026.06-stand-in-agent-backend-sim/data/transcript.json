@@ -1,17 +1,384 @@
-[
-  {"ts": "2026-06-03T09:00:01.000Z", "text": "Welcome to the Google SRE Podcast."},
-  {"ts": "2026-06-03T09:00:04.200Z", "text": "Today we are talking about reliability."},
-  {"ts": "2026-06-03T09:00:08.500Z", "text": "Thanks for having me!"},
-  {"ts": "2026-06-03T09:00:10.100Z", "text": "Reliability is all about"},
-  {"ts": "2026-06-03T09:00:12.300Z", "text": "ensuring our systems meet user expectations."},
-  {"ts": "2026-06-03T09:00:16.000Z", "text": "Absolutely. It starts with setting"},
-  {"ts": "2026-06-03T09:00:18.400Z", "text": "clear Service Level Objectives, or SLOs."},
-  {"ts": "2026-06-03T09:00:22.700Z", "text": "Yes, and monitoring the right SLIs"},
-  {"ts": "2026-06-03T09:00:25.100Z", "text": "so we know when we are burning"},
-  {"ts": "2026-06-03T09:00:27.300Z", "text": "our error budget."},
-  {"ts": "2026-06-03T09:00:30.500Z", "text": "Once the budget is depleted,"},
-  {"ts": "2026-06-03T09:00:32.800Z", "text": "we need to pause new features"},
-  {"ts": "2026-06-03T09:00:34.900Z", "text": "and focus on stability."},
-  {"ts": "2026-06-03T09:00:38.200Z", "text": "That's all the time we have for today."},
-  {"ts": "2026-06-03T09:00:41.000Z", "text": "Thank you both for joining us!"}
-]
+{
+  "session_name": "Cloud Security Podcast Ep 278: Agentic SOC \u2014 Hype vs. Reality",
+  "track_id": "main",
+  "entries": [
+    {
+      "speaker": "Tim",
+      "start_time": 0.0,
+      "end_time": 13.2,
+      "text": "Welcome to the Cloud Security Podcast by Google. I'm Tim Peacock, and joining me today as always is Anton Chuvakin. We're recording live at Google Cloud Next 2026 from the PwC showcase space."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 14.7,
+      "end_time": 24.7,
+      "text": "Great to be here Tim. And we have a fantastic guest with us today: Matt Gregson, Principal at PwC US. Matt, welcome to the show."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 26.2,
+      "end_time": 35.8,
+      "text": "Thanks Anton, thanks Tim. Really excited to be here at Next and to talk about something we're seeing transform security operations in real time."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 37.3,
+      "end_time": 51.7,
+      "text": "And that transformation is around agentic AI in the SOC. Matt, before we get into the future, let's ground ourselves. What does the market actually look like today when it comes to AI in security operations?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 53.2,
+      "end_time": 64.8,
+      "text": "So when you look at the market right now, it's clearly bifurcated into two distinct operating models. The first and most mature is what I'd call the co-pilot model."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 66.3,
+      "end_time": 81.9,
+      "text": "Co-pilots use large language models \u2014 Gemini and others \u2014 integrated via Model Context Protocol servers directly into SecOps platforms. Analysts are querying telemetry through natural language interfaces, parsing alerts, generating trend reports. That's in production at scale today."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 83.4,
+      "end_time": 85.0,
+      "text": "And the second model?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 86.5,
+      "end_time": 99.7,
+      "text": "The second model is true agentic integration \u2014 where AI agents actively participate in or orchestrate remediation pipelines. And I'll be direct: that's still largely in pilot or proof-of-concept phase across most enterprises."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 101.2,
+      "end_time": 109.2,
+      "text": "Organizations are evaluating very carefully where to safely inject agentic decision-making into pre-existing deterministic workflows. The plumbing gets complex fast."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 110.7,
+      "end_time": 115.5,
+      "text": "What's the primary friction point holding enterprises back from fully autonomous operation?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 117.0,
+      "end_time": 134.6,
+      "text": "It's organizational comfort and trust \u2014 full stop. The long-term vision of the industry absolutely mandates autonomous containment and remediation. But security leadership is carefully, methodically testing governance and safety guardrails before they're willing to grant AI agents full execution rights over infrastructure containment."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 136.1,
+      "end_time": 142.9,
+      "text": "Which makes total sense when you think about the blast radius of a badly scoped autonomous action."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 144.4,
+      "end_time": 150.8,
+      "text": "Exactly. And this brings me to a concept I find really useful: the Agentic Overton Window."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 152.3,
+      "end_time": 153.9,
+      "text": "Tell us about that."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 155.4,
+      "end_time": 172.2,
+      "text": "The Agentic Overton Window defines the boundary of autonomous response behaviors that an enterprise finds acceptable and trustworthy at any given moment. Historically, deterministic SOAR workflows established very narrow autonomous boxes \u2014 automatically deleting verified phishing emails from corporate mailboxes, for instance."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 173.7,
+      "end_time": 187.3,
+      "text": "That was a win. Organizations got comfortable with it. The modern security mission is to systematically expand that window over the coming years, pushing these contained execution boxes into broader, more complex environmental scopes."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 188.8,
+      "end_time": 195.2,
+      "text": "So you're not blowing the window open \u2014 you're methodically widening it as you build confidence."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 196.7,
+      "end_time": 205.5,
+      "text": "Right. You earn autonomy incrementally. And the business returns when you do expand it are significant at every level of the organization."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 207.0,
+      "end_time": 214.2,
+      "text": "Break that down for us \u2014 what's the value story at the board level versus the operational level?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 215.7,
+      "end_time": 233.3,
+      "text": "At the executive board and C-suite level, the primary outcome is structural risk reduction. You're talking about a dramatic contraction in Mean Time to Respond \u2014 MTTR. That's the number the board understands. That's the number that maps to breach cost and regulatory exposure."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 234.8,
+      "end_time": 236.8,
+      "text": "And at the operational level?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 238.3,
+      "end_time": 255.1,
+      "text": "At the operational level, the integration of autonomous agents addresses the escalating speed of modern threat actors. You're allowing organizations to match the velocity of highly accelerated attack lifecycles. The adversary is moving fast. Your response infrastructure needs to match that tempo."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 256.6,
+      "end_time": 265.4,
+      "text": "Speaking of threat actors \u2014 there's a lot of hype around AI-enabled attackers. How much of that is real versus marketing noise?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 266.9,
+      "end_time": 275.7,
+      "text": "It's real, and it manifests in very specific, measurable technical impacts. Let me give you two that I think are most important."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 277.2,
+      "end_time": 293.2,
+      "text": "First: automated vulnerability exploitation. Attackers are using specialized LLM pipelines as automated zero-day factories. The resource, time, and financial barriers to discover and weaponize novel vulnerabilities have collapsed. The window between vulnerability disclosure and active widespread exploitation is effectively gone."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 294.7,
+      "end_time": 298.7,
+      "text": "That's not hypothetical anymore. We're seeing that in the wild."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 300.2,
+      "end_time": 314.2,
+      "text": "Exactly. The second point is important though: despite AI acceleration, threat actors still rely heavily on well-documented structural attack paths. LSASS memory dumping, lateral movement, standard privilege escalation \u2014 the post-exploitation mechanics haven't fundamentally changed."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 315.7,
+      "end_time": 329.3,
+      "text": "That's actually a window of opportunity for defenders. Because those mechanics are still visible, security teams can still intercept these paths post-initial access \u2014 provided their response infrastructure operates at machine speed to match."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 330.8,
+      "end_time": 341.6,
+      "text": "Let's talk about the future. Anton, you've been thinking a lot about what the SOC looks like in 2030 \u2014 which is actually only four years away."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 343.1,
+      "end_time": 361.1,
+      "text": "It's close. And the honest answer is that the fundamental role of the human analyst is undergoing a structural shift rather than outright elimination. Due to systemic IT inertia \u2014 legacy architecture dependencies, mainframes, unpatched environments \u2014 traditional Tier 1 manual triage won't disappear entirely."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 362.6,
+      "end_time": 368.2,
+      "text": "But in modernized organizations, human workload shifts dramatically. Three areas in particular stand out."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 369.7,
+      "end_time": 383.7,
+      "text": "First: Agent Supervision. Human analysts become supervisors \u2014 reviewing high-speed autonomous actions, validating containment decisions, auditing agent behavioral strings. You're no longer triaging every alert; you're auditing what your agents did and catching edge cases."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 385.2,
+      "end_time": 398.0,
+      "text": "Second: Detection Engineering and Automation Architecture. Human effort pivots toward constructing, tuning, and maintaining the underlying detection engines, deterministic playbooks, and contextual frameworks that fuel the agentic systems in the first place."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 399.5,
+      "end_time": 409.5,
+      "text": "And third: Threat Landscape Tracking. Continuously aligning your technical defenses with the shifting strategies of global threat actors. That strategic intelligence function remains deeply human."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 411.0,
+      "end_time": 420.2,
+      "text": "Matt, what does an organization need to have in place before they can realistically adopt an agentic SOC architecture? What are the prerequisites?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 421.7,
+      "end_time": 430.5,
+      "text": "Organizations cannot bypass foundational security hygiene by deploying an AI agent. True readiness requires specific technical prerequisites that have to exist first."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 432.0,
+      "end_time": 443.2,
+      "text": "First: centralized data platforms. A unified, high-scale data engine with clean, comprehensive telemetry across host systems, networks, and identity providers. Your agent can't enrich context it can't access."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 444.7,
+      "end_time": 459.5,
+      "text": "Second: integrated core infrastructure. Centralized platform APIs that grant orchestration layers immediate, programmatic execution control over firewalls, IAM systems, and Identity Providers. If your agent can't call an API to block an endpoint, agentic remediation is theoretical."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 461.0,
+      "end_time": 469.8,
+      "text": "That second point is where a lot of organizations are stuck. They have the data; they don't have unified control plane APIs."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 471.3,
+      "end_time": 479.7,
+      "text": "It's the single biggest blocker I see in the field. The tool sprawl problem hasn't been solved yet in most enterprises."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 481.2,
+      "end_time": 500.8,
+      "text": "And the third prerequisite is deterministic SOAR foundations. High-functioning, well-engineered SOAR playbooks must exist before you introduce agents. The optimal architecture executes deterministic logic first \u2014 routine enrichment, threat intel lookups, known variable parsing \u2014 and then passes the highly curated context to an LLM agent for advanced reasoning."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 502.3,
+      "end_time": 511.1,
+      "text": "This structure preserves analytical accuracy and prevents catastrophic context loss if an agent fails mid-execution. The deterministic layer is your safety net."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 512.6,
+      "end_time": 520.2,
+      "text": "Let's talk about the economics and performance of LLM pipelines in this context. Where does the math actually work?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 521.7,
+      "end_time": 536.9,
+      "text": "This is a critical design consideration that I don't think gets enough attention. Passing raw, unfiltered event streams \u2014 high-volume cloud audit logs for example \u2014 directly into an LLM is architecturally and financially non-viable for most enterprises."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 538.4,
+      "end_time": 551.2,
+      "text": "Deterministic streaming detection and response pipelines operate at speeds significantly faster than token-by-token LLM generation. So the optimized SOC infrastructure treats AI as a precise tool within a broader multi-tiered economic model."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 552.7,
+      "end_time": 554.7,
+      "text": "Walk us through the tiers."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 556.2,
+      "end_time": 568.2,
+      "text": "Tier 1 is Deterministic Automation. This operates at minimal cost \u2014 pennies per execution \u2014 and maximal speed. It filters noise, auto-resolves high-confidence alerts via rigid flowcharts, no LLM required."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 569.7,
+      "end_time": 585.3,
+      "text": "Tier 2 is the Agentic LLM Layer. You invoke this mid-to-late in the chain to process complex variables, synthesize threat intel, or summarize dense event clusters. You're calling the LLM only when the deterministic layer genuinely can't handle it."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 586.8,
+      "end_time": 596.8,
+      "text": "Tier 3 is Human Execution. Reserved for high-stakes scenarios requiring ultimate manual validation. The cases where a human really does need to make the call."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 598.3,
+      "end_time": 605.5,
+      "text": "And which LLMs are you actually using at each tier? Are you reaching for the flagship models everywhere?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 607.0,
+      "end_time": 618.2,
+      "text": "No, and this is a point that often surprises people. Rigorous back-testing and observability frameworks consistently show that state-of-the-art flagship models are rarely required for everyday security operations."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 619.7,
+      "end_time": 636.9,
+      "text": "Smaller, highly optimized flash models from prior release cycles provide exceptional accuracy for event summarization and log analysis at a fraction of the token cost. You establish an explicit alert budget through operational testing and match the model tier to the task complexity."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 638.4,
+      "end_time": 646.8,
+      "text": "Before we wrap up \u2014 how should SOC teams be measuring success as they evolve toward this architecture? What metrics matter?"
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 648.3,
+      "end_time": 663.5,
+      "text": "Traditional MTTD and MTTR remain essential. But you have to augment them with agent-specific governance metrics. The number of human touches per case is a critical one. The overall ratio of autonomous versus manual containment executions is another."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 665.0,
+      "end_time": 673.0,
+      "text": "Those metrics tell you how far your autonomous capabilities have actually matured \u2014 not just in theory, but in production."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 674.5,
+      "end_time": 680.9,
+      "text": "Matt, final question: practical advice for a security leader who wants to start this journey today?"
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 682.4,
+      "end_time": 687.2,
+      "text": "Lower the barrier to entry through immediate internal experimentation. Three concrete steps."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 688.7,
+      "end_time": 708.3,
+      "text": "First: construct basic AI agents within ring-fenced testing environments. Don't start in production. Second: connect those agents to existing MCP servers or internal service APIs. Third: evaluate the art of the possible \u2014 validate how effectively the model queries your localized security data before you design complex autonomous workflows."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 709.8,
+      "end_time": 724.6,
+      "text": "Build trust with the technology incrementally, the same way you'd expand that Overton Window. The technology is ready. The question is whether your organization is ready to build the governance structures that let you safely exploit it."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 726.1,
+      "end_time": 734.1,
+      "text": "Fantastic. Matt Gregson from PwC US \u2014 thank you so much for joining us today from Google Cloud Next 2026."
+    },
+    {
+      "speaker": "Matt",
+      "start_time": 735.6,
+      "end_time": 738.4,
+      "text": "Thanks Tim, thanks Anton. Really enjoyed it."
+    },
+    {
+      "speaker": "Anton",
+      "start_time": 739.9,
+      "end_time": 747.9,
+      "text": "And thank you to everyone listening. We'll have show notes in the links below. Subscribe wherever you get your podcasts."
+    },
+    {
+      "speaker": "Tim",
+      "start_time": 749.4,
+      "end_time": 750.6,
+      "text": "Until next time."
+    }
+  ]
+}

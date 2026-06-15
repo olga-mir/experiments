@@ -15,12 +15,12 @@ tasks:
       - uv sync
 
   run:
-    desc: Run the server locally
+    desc: Run the server locally (set SIM_SPEED=60 for fast testing)
     cmds:
       - uv run uvicorn main:app --reload --port 8000
 
   deploy:
-    desc: Deploy the service to Cloud Run using GCP_PROJECT_ID
+    desc: Deploy the service to Cloud Run using GCP_PROJECT_ID (set SIM_SPEED env var, default 1.0 = real-time)
     preconditions:
       - sh: '[[ -n "$GCP_PROJECT_ID" ]]'
         msg: "Error: GCP_PROJECT_ID environment variable must be set (e.g., GCP_PROJECT_ID=my-project task deploy)"
@@ -31,6 +31,7 @@ tasks:
           --region us-central1 \
           --allow-unauthenticated \
           --project $GCP_PROJECT_ID \
+          --set-env-vars "SIM_SPEED=${SIM_SPEED:-1.0}" \
           --quiet
 
   sim-start:
