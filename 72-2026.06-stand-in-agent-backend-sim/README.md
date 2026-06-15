@@ -44,3 +44,7 @@ Streams transcript chunks sequentially as Server-Sent Events (`text/event-stream
 ### `GET /health`
 
 Returns a basic health check showing application status and the count of preloaded transcript chunks.
+
+# Data
+
+[data/google-security-podcast-ep278-raw.txt](data/google-security-podcast-ep278-raw.txt) - transcript copied from Google Cloud Security Podcast [EP278 The Agentic SOC: Are We Measuring Time Saved or Risk Reduced?](https://cloud.withgoogle.com/cloudsecurity/podcast/ep278-the-agentic-soc-are-we-measuring-time-saved-or-risk-reduced/)
