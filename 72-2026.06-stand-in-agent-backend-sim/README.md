@@ -2,30 +2,14 @@
 
 A lightweight FastAPI-based mock server that simulates an asynchronous transcript stream. Useful for testing ingestion clients and frontend interfaces that expect real-time transcription feeds via Server-Sent Events (SSE).
 
+This server is deployed to Cloud Run and is designed to test Stand-In Agents, in this case it mimics conference streaming.
+Agents that consume this stream are here in the same repo, in folder `72-2026.06-stand-in-agent-attendee`. The agent folder contains multiple implementations of the agents to demonstrate different features and capabilities.
+
+
 ## Requirements
 
 - Python >= 3.14
 - `uv` package manager
-
-## Quick Start
-
-1. Install dependencies:
-   ```bash
-   task init
-   ```
-   *or manually:*
-   ```bash
-   uv sync
-   ```
-
-2. Start the local server:
-   ```bash
-   task run
-   ```
-   *or manually:*
-   ```bash
-   uv run uvicorn main:app --reload --port 8000
-   ```
 
 ## Endpoints
 
