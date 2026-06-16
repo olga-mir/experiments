@@ -14,6 +14,8 @@ from .tools import (
     get_session_transcript,
     checkin,
     save_screenshot_to_bucket,
+    get_streams,
+    get_sim_transcript,
 )
 
 # Import the reusable GitHub MCP toolset helper
@@ -53,6 +55,19 @@ Be {config.on_behalf_of}'s eyes and ears across all rooms simultaneously.
 
 ## Your Ambient Sweep (Perform this once per trigger)
 
+### Simulation mode (SIMULATION_BASE_URL is set)
+
+1. **Check status** — call `get_streams()`.
+   - `"idle"` and you have not yet received any entries → session hasn't started; note this and finish.
+   - `"idle"` and you have already received entries → stream was killed early; summarize what you have then commit and finish.
+   - `"live"` → proceed to step 2.
+   - `"finished"` → fetch remaining transcript (step 2), produce final summary, commit, and finish.
+2. **Fetch captions** — call `get_sim_transcript(since=<last_ts>)`. Omit `since` on the first call.
+3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, alert {config.on_behalf_of}.
+4. **Commit** — Commit any findings, alerts, or summaries to the conference GitHub repository.
+
+### Real conference mode (no SIMULATION_BASE_URL)
+
 1. **Check what's live** — call `get_live_streams()`.
 2. **Review live rooms** — for each live stream, call `get_captions()` and `get_current_screen()`.
 3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, or if a demo is on screen, alert {config.on_behalf_of}.
@@ -63,7 +78,8 @@ Be {config.on_behalf_of}'s eyes and ears across all rooms simultaneously.
 ## State Management
 
 Since you run periodically, use your memory/session to keep track of the last timestamp
-you processed for each room to avoid duplicate alerts. Use the `?since=` parameter in `get_captions`.
+you processed to avoid duplicate alerts. Pass it as the `since` argument to `get_sim_transcript`
+(sim mode) or `get_captions` (real conference mode).
 
 ## GitHub Commits
 
@@ -75,6 +91,10 @@ Finish your execution once you have completed the sweep for all active rooms.
 
 ambient_agent_tools = [
     FunctionTool(parse_event),
+    # Simulation mode tools (backend sim: /streams + /transcript)
+    FunctionTool(get_streams),
+    FunctionTool(get_sim_transcript),
+    # Real conference tools (agents.conffab.com)
     FunctionTool(get_live_streams),
     FunctionTool(get_captions),
     FunctionTool(get_current_screen),

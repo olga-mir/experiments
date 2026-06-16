@@ -172,6 +172,60 @@ def checkin(note: str = "") -> dict:
         return {"error": str(e)}
 
 
+def get_streams() -> dict:
+    """Returns the current simulation status.
+
+    Call this first each polling cycle to check whether the session is live.
+
+    Status values:
+    - "idle"     — simulation not yet started; check back in ~30 seconds
+    - "live"     — session is streaming; call get_sim_transcript() for captions
+    - "finished" — all content has been served; produce your final summary and stop polling
+    """
+    sim_url = config.simulation_base_url
+    if not sim_url:
+        return {"error": "SIMULATION_BASE_URL not configured. Set SIMULATION_BASE_URL in .setup-env."}
+
+    status, body = _get(f"{sim_url}/streams")
+    if status != 200:
+        return {"error": body}
+    try:
+        return json.loads(body)
+    except Exception:
+        return {"raw": body}
+
+
+def get_sim_transcript(since: str = "") -> dict:
+    """Fetches new transcript entries from the simulator since your last poll.
+
+    The simulator releases entries progressively — polling again will return
+    entries that have arrived since your last call. Pass the `ts` of the last
+    entry you received as `since` to get only new lines.
+
+    Returns an empty list when no new entries have arrived yet (session may
+    still be live — check get_streams() status).
+
+    Args:
+        since: ISO 8601 timestamp (e.g. '2026-06-03T09:00:10.000Z'); omit on first call
+    """
+    sim_url = config.simulation_base_url
+    if not sim_url:
+        return {"error": "SIMULATION_BASE_URL not configured. Set SIMULATION_BASE_URL in .setup-env."}
+
+    url = f"{sim_url}/transcript"
+    if since:
+        url += f"?since={urllib.parse.quote(since)}"
+
+    status, body = _get(url)
+    if status != 200:
+        return {"error": body}
+    try:
+        entries = json.loads(body)
+        return {"entries": entries}
+    except Exception:
+        return {"raw": body}
+
+
 def save_screenshot_to_bucket(stream_id: str) -> dict:
     """Downloads the current live screenshot for the given stream and uploads it to the configured Google Cloud Storage bucket.
 
