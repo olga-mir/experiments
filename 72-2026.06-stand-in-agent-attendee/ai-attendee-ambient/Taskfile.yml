@@ -110,6 +110,7 @@ tasks:
             --http-method=POST \
             --message-body='{"tick": "true"}' \
             --oidc-service-account-email="{{.SA_EMAIL}}" \
+            --oidc-token-audience="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         else
           echo "Creating new scheduler job..."
@@ -119,5 +120,6 @@ tasks:
             --http-method=POST \
             --message-body='{"tick": "true"}' \
             --oidc-service-account-email="{{.SA_EMAIL}}" \
+            --oidc-token-audience="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         fi
