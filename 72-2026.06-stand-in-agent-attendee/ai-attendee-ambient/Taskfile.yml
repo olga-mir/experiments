@@ -60,12 +60,17 @@ tasks:
       - agents-cli deploy --project {{.PROJECT_ID}}
 
   setup:infra:
-    desc: Set up Service Account and IAM roles for Cloud Scheduler
+    desc: Enable APIs, create Service Account, and grant IAM roles for Cloud Scheduler
     deps: [preflight]
     vars:
       SA_NAME: "ambient-attendee-scheduler"
       SA_EMAIL: "{{.SA_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
     cmds:
+      - |
+        echo "Enabling required GCP APIs..."
+        gcloud services enable cloudscheduler.googleapis.com --project={{.PROJECT_ID}}
+        gcloud services enable run.googleapis.com --project={{.PROJECT_ID}}
+        gcloud services enable aiplatform.googleapis.com --project={{.PROJECT_ID}}
       - |
         if ! gcloud iam service-accounts describe {{.SA_EMAIL}} >/dev/null 2>&1; then
           echo "Creating service account {{.SA_EMAIL}}..."
