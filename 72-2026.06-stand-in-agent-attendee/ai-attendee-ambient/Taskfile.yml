@@ -73,6 +73,8 @@ tasks:
     vars:
       SA_NAME: "ambient-attendee-scheduler"
       SA_EMAIL: "{{.SA_NAME}}@{{.PROJECT_ID}}.iam.gserviceaccount.com"
+      CLOUD_RUN_SERVICE: "ai-attendee-ambient"
+      CLOUD_RUN_REGION: "{{.CLOUD_RUN_REGION | default \"us-east1\"}}"
     cmds:
       - |
         echo "Enabling required GCP APIs..."
@@ -88,6 +90,13 @@ tasks:
         gcloud projects add-iam-policy-binding {{.PROJECT_ID}} \
           --member="serviceAccount:{{.SA_EMAIL}}" \
           --role="roles/aiplatform.user"
+      - |
+        echo "Granting Cloud Run Invoker role to {{.SA_EMAIL}} on service {{.CLOUD_RUN_SERVICE}}..."
+        gcloud run services add-iam-policy-binding {{.CLOUD_RUN_SERVICE}} \
+          --member="serviceAccount:{{.SA_EMAIL}}" \
+          --role="roles/run.invoker" \
+          --region="{{.CLOUD_RUN_REGION}}" \
+          --project={{.PROJECT_ID}}
 
   schedule:
     desc: Schedule the ambient agent to run every 5 minutes using Cloud Scheduler
