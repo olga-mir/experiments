@@ -106,20 +106,20 @@ tasks:
           echo "Updating existing scheduler job..."
           gcloud scheduler jobs update http ambient-cron \
             --schedule="*/5 * * * *" \
-            --uri="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --uri="${AGENT_URL}:streamQuery" \
             --http-method=POST \
-            --message-body='{"tick": "true"}' \
+            --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
             --oidc-service-account-email="{{.SA_EMAIL}}" \
-            --oidc-token-audience="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --oidc-token-audience="${AGENT_URL}" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         else
           echo "Creating new scheduler job..."
           gcloud scheduler jobs create http ambient-cron \
             --schedule="*/5 * * * *" \
-            --uri="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --uri="${AGENT_URL}:streamQuery" \
             --http-method=POST \
-            --message-body='{"tick": "true"}' \
+            --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
             --oidc-service-account-email="{{.SA_EMAIL}}" \
-            --oidc-token-audience="${AGENT_URL}/apps/ambient_ai_attendee/trigger/webhook" \
+            --oidc-token-audience="${AGENT_URL}" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         fi
