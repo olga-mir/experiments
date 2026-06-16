@@ -9,11 +9,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 setup_env_path = os.path.join(project_root, ".setup-env")
 
+import sys
+
 if os.path.exists(setup_env_path):
     load_dotenv(dotenv_path=setup_env_path, override=True)
-    print(f"Loaded configuration from {setup_env_path}")
+    print(f"Loaded configuration from {setup_env_path}", file=sys.stderr)
 else:
-    print(f"Warning: {setup_env_path} not found. Using system environment variables.")
+    print(f"Warning: {setup_env_path} not found. Using system environment variables.", file=sys.stderr)
 
 try:
     _, project_id = google.auth.default()
