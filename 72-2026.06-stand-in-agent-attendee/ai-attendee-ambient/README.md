@@ -15,8 +15,6 @@ ai-attendee-v2/
 └── pyproject.toml             # Project dependencies
 ```
 
-> 💡 **Tip:** Use [Gemini CLI](https://github.com/google-gemini/gemini-cli) for AI-assisted development - project context is pre-configured in `GEMINI.md`.
-
 ## Requirements
 
 Before you begin, ensure you have:
@@ -83,3 +81,14 @@ To set up your production infrastructure, run `agents-cli infra cicd`.
 ## Observability
 
 Built-in telemetry exports to Cloud Trace, BigQuery, and Cloud Logging.
+
+## Deployment
+
+After `task deploy`
+Get the resource name from deployment_metadata.json, then add to .setup-env:
+
+```
+export AGENT_ENGINE_RESOURCE=projects/471108326825/locations/us-east1/reasoningEngines/<new-id>
+```
+
+Redeploy to pick up the env var `task deploy`

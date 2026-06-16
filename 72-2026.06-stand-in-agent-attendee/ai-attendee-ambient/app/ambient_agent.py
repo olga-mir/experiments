@@ -18,14 +18,6 @@ from .tools import (
     get_sim_transcript,
 )
 
-# Import the reusable GitHub MCP toolset helper
-try:
-    from shared_tools import get_github_mcp_toolset
-    github_toolset = get_github_mcp_toolset()
-except Exception as e:
-    print(f"⚠️ Warning: Could not initialize GitHub MCP toolset: {e}")
-    github_toolset = None
-
 def parse_event(raw_event: str) -> dict:
     """Parses the incoming trigger event payload."""
     try:
@@ -63,28 +55,20 @@ Be {config.on_behalf_of}'s eyes and ears across all rooms simultaneously.
    - `"live"` → proceed to step 2.
    - `"finished"` → fetch remaining transcript (step 2), produce final summary, commit, and finish.
 2. **Fetch captions** — call `get_sim_transcript(since=<last_ts>)`. Omit `since` on the first call.
-3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, alert {config.on_behalf_of}.
-4. **Commit** — Commit any findings, alerts, or summaries to the conference GitHub repository.
+3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, note them clearly in your response with a brief explanation of why they are relevant to {config.on_behalf_of}.
 
 ### Real conference mode (no SIMULATION_BASE_URL)
 
 1. **Check what's live** — call `get_live_streams()`.
 2. **Review live rooms** — for each live stream, call `get_captions()` and `get_current_screen()`.
-3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, or if a demo is on screen, alert {config.on_behalf_of}.
+3. **Analyze and Alert** — If keywords like "GKE", "GPU", "RAG", "MCP" appear, or if a demo is on screen, note them clearly with a brief explanation.
 4. **Screenshot** — If you see something worth preserving, call `save_screenshot_to_bucket(stream_id)`.
-5. **Summarize** — Produce summaries for any recently completed sessions.
-6. **Commit** — Commit any findings, alerts, or summaries to the conference GitHub repository.
 
 ## State Management
 
 Since you run periodically, use your memory/session to keep track of the last timestamp
 you processed to avoid duplicate alerts. Pass it as the `since` argument to `get_sim_transcript`
 (sim mode) or `get_captions` (real conference mode).
-
-## GitHub Commits
-
-The repository is `{config.conference_repo}`.
-Path: `{config.conference_name.lower().replace(" ", "-")}/ambient/<ISO-timestamp>.md`.
 
 Finish your execution once you have completed the sweep for all active rooms.
 """
@@ -104,9 +88,6 @@ ambient_agent_tools = [
     FunctionTool(checkin),
     FunctionTool(save_screenshot_to_bucket),
 ]
-
-if github_toolset:
-    ambient_agent_tools.append(github_toolset)
 
 ambient_ai_attendee = Agent(
     name="ambient_ai_attendee",
