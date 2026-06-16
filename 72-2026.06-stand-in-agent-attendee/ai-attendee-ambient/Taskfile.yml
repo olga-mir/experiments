@@ -25,7 +25,7 @@ tasks:
   install:
     desc: Install dependencies
     cmds:
-      - agents-cli install
+      - agents-cli install --clean
 
   run:
     desc: Run the ambient agent (one-off prompt)
@@ -57,7 +57,7 @@ tasks:
     desc: Deploy the ambient agent to GCP Agent Platform
     deps: [preflight]
     cmds:
-      - agents-cli deploy
+      - agents-cli deploy --project {{.PROJECT_ID}}
 
   setup:infra:
     desc: Set up Service Account and IAM roles for Cloud Scheduler
