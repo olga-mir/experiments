@@ -35,39 +35,49 @@ tasks:
           --quiet
 
   sim-start:
-    desc: Start the simulation at real-time speed (use SIM_URL=http://localhost:8000 or the Cloud Run URL)
+    desc: Start the simulation at real-time speed (set SIM_URL for Cloud Run, defaults to localhost:8000)
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
-      - curl -s -X POST "{{.URL}}/sim/start" | python3 -m json.tool
+      - |
+        RESP=$(curl -sf -X POST "{{.URL}}/sim/start") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
+        echo "$RESP" | python3 -m json.tool
 
   sim-start-fast:
     desc: Start the simulation at 60x speed (1 min of content per real second — useful for testing)
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
-      - curl -s -X POST "{{.URL}}/sim/start?speed=60" | python3 -m json.tool
+      - |
+        RESP=$(curl -sf -X POST "{{.URL}}/sim/start?speed=60") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
+        echo "$RESP" | python3 -m json.tool
 
   sim-kill:
     desc: Killswitch — flip stream to idle immediately so the agent stops (use sim-reset to clear)
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
-      - curl -s -X POST "{{.URL}}/sim/kill" | python3 -m json.tool
+      - |
+        RESP=$(curl -sf -X POST "{{.URL}}/sim/kill") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
+        echo "$RESP" | python3 -m json.tool
 
   sim-reset:
     desc: Reset the simulation back to idle (also clears a killed state)
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
-      - curl -s -X POST "{{.URL}}/sim/reset" | python3 -m json.tool
+      - |
+        RESP=$(curl -sf -X POST "{{.URL}}/sim/reset") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
+        echo "$RESP" | python3 -m json.tool
 
   sim-status:
     desc: Check current simulation status
     vars:
       URL: '{{.SIM_URL | default "http://localhost:8000"}}'
     cmds:
-      - curl -s "{{.URL}}/streams" | python3 -m json.tool
+      - |
+        RESP=$(curl -sf "{{.URL}}/streams") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
+        echo "$RESP" | python3 -m json.tool
 
   setup-infra:
     desc: Enable required GCP APIs and setup IAM permissions for Cloud Run / Cloud Build
