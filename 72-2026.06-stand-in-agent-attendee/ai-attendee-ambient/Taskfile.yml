@@ -17,6 +17,9 @@ tasks:
         if [ -z "$SCREENSHOTS_BUCKET_NAME" ]; then
           echo "⚠️  SCREENSHOTS_BUCKET_NAME is not set (screenshots will fail)"
         fi
+        if [ -z "$SIMULATION_BASE_URL" ]; then
+          echo "⚠️  SIMULATION_BASE_URL is not set (backend simulation calls will fail)"
+        fi
         if [ "$ERRORS" -gt 0 ]; then
           exit 1
         fi
@@ -57,7 +60,12 @@ tasks:
     desc: Deploy the ambient agent to GCP Agent Platform
     deps: [preflight]
     cmds:
-      - agents-cli deploy --project {{.PROJECT_ID}}
+      - |
+        if [ -z "$SIMULATION_BASE_URL" ]; then
+          echo "❌ SIMULATION_BASE_URL is not set"
+          exit 1
+        fi
+        agents-cli deploy --project {{.PROJECT_ID}} --update-env-vars SIMULATION_BASE_URL=$SIMULATION_BASE_URL
 
   setup:infra:
     desc: Enable APIs, create Service Account, and grant IAM roles for Cloud Scheduler
