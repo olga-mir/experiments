@@ -118,8 +118,8 @@ tasks:
             --uri="${AGENT_URL}:streamQuery" \
             --http-method=POST \
             --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
-            --oidc-service-account-email="{{.SA_EMAIL}}" \
-            --oidc-token-audience="${AGENT_URL}" \
+            --oauth-service-account-email="{{.SA_EMAIL}}" \
+            --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         else
           echo "Creating new scheduler job..."
@@ -128,7 +128,7 @@ tasks:
             --uri="${AGENT_URL}:streamQuery" \
             --http-method=POST \
             --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
-            --oidc-service-account-email="{{.SA_EMAIL}}" \
-            --oidc-token-audience="${AGENT_URL}" \
+            --oauth-service-account-email="{{.SA_EMAIL}}" \
+            --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform" \
             --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
         fi
