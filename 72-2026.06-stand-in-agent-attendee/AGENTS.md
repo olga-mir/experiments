@@ -5,7 +5,7 @@ AI agent that attends a conference on behalf of a user, monitors live captions, 
 ## Sub-projects
 
 ### `ai-attendee-ambient/`
-Periodically triggered agent deployed to Vertex AI Agent Engine (agent_runtime). Cloud Scheduler POSTs a "tick" to the webhook endpoint every 5 minutes; each tick does one sweep — checks stream status, fetches new captions since last poll, and emits alerts for relevant keywords (GKE, GPU, RAG, MCP, etc.). Uses Vertex AI sessions for state continuity across ticks.
+Periodically triggered agent deployed to Vertex AI Agent Engine. Cloud Scheduler POSTs a "tick" directly to the Reasoning Engine `:streamQuery` REST endpoint every 5 minutes; each tick does one sweep — checks stream status, fetches new captions since last poll, and emits alerts for relevant keywords (GKE, GPU, RAG, MCP, etc.). Uses a persistent Vertex AI session for state continuity across ticks.
 
 ### `ai-attendee-standard/`
 Long-running reactive agent deployed to Vertex AI Agent Engine. Loops continuously: checks stream status → fetches captions → analyzes → alerts → repeat, until the session finishes. Suited for running interactively during a session via the Agent Engine playground.
@@ -43,15 +43,37 @@ task trigger   # in another terminal — simulates a Cron tick
 # Deploy to Vertex AI Agent Engine
 task deploy
 
-# Wire up Cloud Scheduler (requires AGENT_URL env var)
-AGENT_URL=https://... task schedule
+# One-time infra setup (SA, IAM, APIs)
+task setup:infra
+
+# Create a persistent session (required before scheduling)
+task session:create
+
+# Wire up Cloud Scheduler
+AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/<PROJECT_NUM>/locations/us-east1/reasoningEngines/<ENGINE_ID> \
+  task schedule
+
+# View agent outputs
+task logs
+
+# Reset session between test runs (then re-run task schedule)
+task session:reset
 ```
 
-## Infra setup (one-time)
+## How Cloud Scheduler triggers the agent
 
-```bash
-task setup:infra   # enables APIs, creates SA, grants IAM roles
+The scheduler job POSTs directly to the Reasoning Engine `:streamQuery` REST endpoint:
+
+```
+POST https://us-east1-aiplatform.googleapis.com/v1/projects/<NUM>/locations/us-east1/reasoningEngines/<ID>:streamQuery
+Authorization: Bearer <oauth-token>   # OAuth required for *.googleapis.com URLs
+Content-Type: application/json
+
+{"input": {"message": "tick", "user_id": "scheduler", "session_id": "<session-id>"}}
 ```
 
-Then after first `task deploy`, copy `remote_agent_runtime_id` from `deployment_metadata.json`
-into `.setup-env` as `AGENT_ENGINE_RESOURCE`, then `task deploy` again to pick it up.
+Key details:
+- **OAuth (not OIDC):** Cloud Scheduler's OAuth token auth requires the URL to end in `.googleapis.com`. The Taskfile auto-selects OIDC for Cloud Run URLs.
+- **`input` envelope:** The Reasoning Engine API wraps all method arguments under `input`.
+- **Persistent session:** The session must be created first via `task session:create`. The ID is saved to `.ambient_session_id` and picked up automatically by `task schedule`.
+- **SA permissions:** `ambient-attendee-scheduler@<project>.iam.gserviceaccount.com` needs `roles/aiplatform.user`.

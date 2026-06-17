@@ -7,13 +7,14 @@ Ambient AI conference attendee agent. Triggered periodically by Cloud Scheduler;
 ```
 ai-attendee-ambient/
 ├── app/
-│   ├── ambient_agent.py   # Agent definition, tools, system instructions
-│   ├── agent.py           # ADK App wrapper
+│   ├── ambient_agent.py      # Agent definition, tools, system instructions
+│   ├── agent.py              # ADK App wrapper
 │   ├── agent_runtime_app.py  # Agent Engine deployment entry point
-│   ├── fast_api_app.py    # FastAPI webhook server (local dev + trigger endpoint)
-│   ├── config.py          # Config from .setup-env
-│   └── tools.py           # get_streams(), get_sim_transcript()
-├── .setup-env             # Local secrets/config (not committed)
+│   ├── fast_api_app.py       # FastAPI webhook server (local dev + trigger endpoint)
+│   ├── config.py             # Config from .setup-env
+│   └── tools.py              # get_streams(), get_sim_transcript()
+├── .setup-env                # Local secrets/config (not committed)
+├── .ambient_session_id       # Persistent session ID (git-ignored, created by task session:create)
 ├── agents-cli-manifest.yaml
 └── Taskfile.yml
 ```
@@ -53,7 +54,7 @@ task trigger          # in another terminal — POSTs a tick to the local webhoo
 ## Deployment
 
 ```bash
-task deploy           # deploys to Vertex AI Agent Engine (us-east1)
+task deploy
 ```
 
 After the first deploy, copy the resource name from `deployment_metadata.json`:
@@ -81,20 +82,67 @@ is running first (see below).
 task setup:infra
 ```
 
-This enables `cloudscheduler.googleapis.com`, `run.googleapis.com`, `aiplatform.googleapis.com`,
-creates the `ambient-attendee-scheduler` service account, and grants it `roles/aiplatform.user`.
+Enables `cloudscheduler.googleapis.com`, `run.googleapis.com`, `aiplatform.googleapis.com`,
+creates the `ambient-attendee-scheduler` service account, and grants it `roles/aiplatform.user`
+(required to call `:streamQuery` on the Reasoning Engine).
 
-### 2. Wire up the cron job
+### 2. Create a persistent session
 
-The `AGENT_URL` is the Vertex AI Agent Engine base URL for your reasoning engine:
+The agent needs a session to exist before the scheduler can reuse it for continuity across ticks.
 
 ```bash
-AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/471108326825/locations/us-east1/reasoningEngines/<engine-id> \
-  task schedule
+task session:create
 ```
 
-This creates a Cloud Scheduler job (`ambient-cron`) that POSTs to
-`<AGENT_URL>/apps/ambient_ai_attendee/trigger/webhook` every 5 minutes using OIDC auth.
+This calls the Agent Engine sessions API, creates a session for `user_id=scheduler`, and saves
+the session ID to `.ambient_session_id`. The `schedule` task reads this file automatically.
+
+### 3. Wire up the cron job
+
+`AGENT_URL` is the Vertex AI Agent Engine base resource URL (v1, not v1beta1):
+
+```bash
+export AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/471108326825/locations/us-east1/reasoningEngines/<engine-id>
+task schedule
+```
+
+This creates (or updates) a Cloud Scheduler job (`ambient-cron`) that POSTs to
+`<AGENT_URL>:streamQuery` every 5 minutes with OAuth auth. The request body includes
+the session ID from `.ambient_session_id` so each tick continues the same session.
+
+**Why OAuth (not OIDC):** Cloud Scheduler's OAuth token auth requires the target URL to end
+in `.googleapis.com`. OIDC is used automatically by the Taskfile when targeting Cloud Run URLs.
+
+**Request body format** (set by the Taskfile):
+```json
+{"input": {"message": "tick", "user_id": "scheduler", "session_id": "<session-id>"}}
+```
+
+The `input` envelope is required by the Reasoning Engine REST API — method arguments are
+not passed at the top level.
+
+### Viewing agent output
+
+```bash
+task logs             # last 50 log lines from the Reasoning Engine
+task logs -- 100      # more lines
+```
+
+Logs appear in `aiplatform.googleapis.com/reasoning_engine_stderr` in Cloud Logging.
+
+## Session management
+
+| Command | Purpose |
+|---------|---------|
+| `task session:create` | Create a new session, save ID to `.ambient_session_id` |
+| `task session:list` | List all sessions for `user_id=scheduler` |
+| `task session:reset` | Delete current session and create a fresh one (use between test runs), then re-run `task schedule` |
+
+After `session:reset`, re-run `task schedule` to update the scheduler with the new session ID:
+```bash
+task session:reset
+AGENT_URL=... task schedule
+```
 
 ## Sim backend
 
