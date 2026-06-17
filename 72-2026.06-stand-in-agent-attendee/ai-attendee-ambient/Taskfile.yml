@@ -103,32 +103,45 @@ tasks:
     deps: [preflight]
     vars:
       SA_EMAIL: "ambient-attendee-scheduler@{{.PROJECT_ID}}.iam.gserviceaccount.com"
+      SCHEDULER_LOCATION: "{{.GOOGLE_CLOUD_LOCATION | default \"us-central1\"}}"
     cmds:
       - |
         if [ -z "$AGENT_URL" ]; then
           echo "❌ AGENT_URL environment variable is not set."
-          echo "Usage: AGENT_URL=https://... task schedule"
+          echo "   For Cloud Run:        AGENT_URL=https://<service>.run.app/apps/ambient_ai_attendee/trigger/webhook"
+          echo "   For Reasoning Engine: AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/<NUM>/locations/us-east1/reasoningEngines/<ID>"
           exit 1
         fi
+
+        # Cloud Scheduler OAuth requires .googleapis.com; use OIDC for Cloud Run (.run.app)
+        if echo "$AGENT_URL" | grep -q '\.googleapis\.com'; then
+          TARGET_URI="${AGENT_URL}:streamQuery"
+          AUTH_FLAGS="--oauth-service-account-email={{.SA_EMAIL}} --oauth-token-scope=https://www.googleapis.com/auth/cloud-platform"
+          echo "Using OAuth auth (googleapis.com endpoint)"
+        else
+          TARGET_URI="${AGENT_URL}"
+          BASE_URL=$(echo "$AGENT_URL" | sed 's|\(https://[^/]*\).*|\1|')
+          AUTH_FLAGS="--oidc-service-account-email={{.SA_EMAIL}} --oidc-token-audience=${BASE_URL}"
+          echo "Using OIDC auth (Cloud Run endpoint, audience: ${BASE_URL})"
+        fi
+
         # Check if job exists, if so update, otherwise create
-        if gcloud scheduler jobs describe ambient-cron --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}" >/dev/null 2>&1; then
+        if gcloud scheduler jobs describe ambient-cron --location="{{.SCHEDULER_LOCATION}}" >/dev/null 2>&1; then
           echo "Updating existing scheduler job..."
           gcloud scheduler jobs update http ambient-cron \
             --schedule="*/5 * * * *" \
-            --uri="${AGENT_URL}:streamQuery" \
+            --uri="${TARGET_URI}" \
             --http-method=POST \
             --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
-            --oauth-service-account-email="{{.SA_EMAIL}}" \
-            --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform" \
-            --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
+            ${AUTH_FLAGS} \
+            --location="{{.SCHEDULER_LOCATION}}"
         else
           echo "Creating new scheduler job..."
           gcloud scheduler jobs create http ambient-cron \
             --schedule="*/5 * * * *" \
-            --uri="${AGENT_URL}:streamQuery" \
+            --uri="${TARGET_URI}" \
             --http-method=POST \
             --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
-            --oauth-service-account-email="{{.SA_EMAIL}}" \
-            --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform" \
-            --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
+            ${AUTH_FLAGS} \
+            --location="{{.SCHEDULER_LOCATION}}"
         fi
