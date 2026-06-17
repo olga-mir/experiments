@@ -81,7 +81,12 @@ tasks:
           -H "Authorization: Bearer $TOKEN" \
           -H "Content-Type: application/json" \
           -d '{"user_id": "scheduler"}')
-        SESSION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name','').split('/')[-1])" 2>/dev/null)
+        # Response is an LRO; session name is in response['name']
+        SESSION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('response', {}).get('name', '').split('/')[-1])" 2>/dev/null)
+        if [ -z "$SESSION_ID" ]; then
+          # Fallback for synchronous response (v1beta1 can sometimes be sync depending on region/load)
+          SESSION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name','').split('/')[-1])" 2>/dev/null)
+        fi
         if [ -z "$SESSION_ID" ]; then
           echo "❌ Failed to create session"
           echo "$RESPONSE"
@@ -168,6 +173,24 @@ tasks:
           --role="roles/run.invoker" \
           --region="{{.CLOUD_RUN_REGION}}" \
           --project={{.PROJECT_ID}}
+
+  job:run:
+    desc: Manually trigger the Cloud Scheduler job
+    deps: [preflight]
+    cmds:
+      - gcloud scheduler jobs run ambient-cron --location="{{.GOOGLE_CLOUD_LOCATION | default "us-central1"}}"
+
+  logs:raw:
+    desc: Tail most recent Reasoning Engine logs in reverse order (newest first)
+    deps: [preflight]
+    cmds:
+      - |
+        gcloud logging read \
+          'resource.type="aiplatform.googleapis.com/ReasoningEngine" AND resource.labels.reasoning_engine_id="{{.ENGINE_ID}}"' \
+          --project={{.PROJECT_ID}} \
+          --limit={{.CLI_ARGS | default "20"}} \
+          --order=desc \
+          --format="table(timestamp,textPayload)"
 
   schedule:
     desc: Schedule the ambient agent to run every 5 minutes using Cloud Scheduler
