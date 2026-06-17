@@ -56,6 +56,20 @@ tasks:
           -H "Content-Type: application/json" \
           -d '{"message": "tick"}'
 
+  logs:
+    desc: Tail recent Reasoning Engine logs (agent stdout/stderr)
+    deps: [preflight]
+    vars:
+      ENGINE_ID: "4092540608256671744"
+    cmds:
+      - |
+        gcloud logging read \
+          'resource.type="aiplatform.googleapis.com/ReasoningEngine" AND resource.labels.reasoning_engine_id="{{.ENGINE_ID}}"' \
+          --project={{.PROJECT_ID}} \
+          --limit={{.CLI_ARGS | default "50"}} \
+          --order=asc \
+          --format="table(timestamp,textPayload)"
+
   deploy:
     desc: Deploy the ambient agent to GCP Agent Platform
     deps: [preflight]
@@ -132,7 +146,8 @@ tasks:
             --schedule="*/5 * * * *" \
             --uri="${TARGET_URI}" \
             --http-method=POST \
-            --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
+            --update-headers="Content-Type=application/json" \
+            --message-body='{"input": {"message": "tick", "user_id": "scheduler"}}' \
             ${AUTH_FLAGS} \
             --location="{{.SCHEDULER_LOCATION}}"
         else
@@ -141,7 +156,8 @@ tasks:
             --schedule="*/5 * * * *" \
             --uri="${TARGET_URI}" \
             --http-method=POST \
-            --message-body='{"input": "tick", "session_id": "ambient-sweep-main"}' \
+            --headers="Content-Type=application/json" \
+            --message-body='{"input": {"message": "tick", "user_id": "scheduler"}}' \
             ${AUTH_FLAGS} \
             --location="{{.SCHEDULER_LOCATION}}"
         fi
