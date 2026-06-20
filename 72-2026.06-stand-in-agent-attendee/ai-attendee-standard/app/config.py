@@ -49,7 +49,7 @@ class AgentConfiguration:
 
     @property
     def conference_name(self) -> str:
-        return os.environ.get("CONFERENCE_NAME", "AI Engineer Melbourne 2026")
+        return os.environ.get("CONFERENCE_NAME", "Demo for GDG June 2026")
 
     @property
     def conference_dates(self) -> str:
@@ -69,7 +69,7 @@ class AgentConfiguration:
 
     @property
     def conference_base_url(self) -> str:
-        return os.environ.get("CONFERENCE_BASE_URL", "https://agents.conffab.com/ai-engineer/live")
+        return os.environ.get("CONFERENCE_BASE_URL", "NOTE_SET")
 
     @property
     def simulation_base_url(self) -> str:
@@ -83,11 +83,7 @@ class AgentConfiguration:
 
     @property
     def program_url(self) -> str:
-        return os.environ.get("PROGRAM_URL", "https://data.webdirections.org/ai-engineer/llms.txt")
-
-    @property
-    def checkin_url(self) -> str:
-        return os.environ.get("CHECKIN_URL", self.base_url.replace("/live", "/checkin"))
+        return os.environ.get("PROGRAM_URL", "NOT_SET")
 
 
 config = AgentConfiguration()
