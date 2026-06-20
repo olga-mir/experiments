@@ -13,6 +13,7 @@ except Exception as e:
 
 from google.adk.agents import Agent
 from google.adk.tools import FunctionTool
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from vertexai.preview import reasoning_engines
 
 from .config import config, get_model_wrapper
@@ -83,4 +84,15 @@ ai_engineer_attendee = Agent(
 root_agent = ai_engineer_attendee
 
 # Wrap for Vertex AI Agent Engine deployment
-app = reasoning_engines.AdkApp(agent=root_agent)
+class AutoCreateSessionAdkApp(reasoning_engines.AdkApp):
+    def set_up(self):
+        super().set_up()
+        if "runner" in self._tmpl_attrs:
+            self._tmpl_attrs["runner"].auto_create_session = True
+        if "in_memory_runner" in self._tmpl_attrs:
+            self._tmpl_attrs["in_memory_runner"].auto_create_session = True
+
+app = AutoCreateSessionAdkApp(
+    agent=root_agent,
+    session_service_builder=InMemorySessionService,
+)

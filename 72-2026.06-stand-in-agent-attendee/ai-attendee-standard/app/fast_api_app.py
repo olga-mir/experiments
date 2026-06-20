@@ -20,7 +20,7 @@ allow_origins = (
 logs_bucket_name = os.environ.get("LOGS_BUCKET_NAME")
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-session_service_uri = None
+session_service_uri = "memory://"
 artifact_service_uri = f"gs://{logs_bucket_name}" if logs_bucket_name else None
 
 app: FastAPI = get_fast_api_app(
@@ -30,6 +30,7 @@ app: FastAPI = get_fast_api_app(
     allow_origins=allow_origins,
     session_service_uri=session_service_uri,
     otel_to_cloud=True,
+    auto_create_session=True,
 )
 app.title = "ai-attendee-standard"
 app.description = "API for interacting with the Standard Conference Attendee Agent"
