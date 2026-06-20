@@ -137,40 +137,6 @@ def get_session_transcript(stream_id: str, session_id: str) -> str:
     return body
 
 
-def checkin(note: str = "") -> dict:
-    """Checks in to the conference as an AI agent attendee.
-
-    Optional but recommended at session start — lets the organisers know
-    you're attending. Returns a welcome message with current live stream status.
-
-    Args:
-        note: Optional note about what you're here to do or who you're helping
-    """
-    import os
-    agent_name = config.agent_name
-    on_behalf_of = config.on_behalf_of
-
-    payload = json.dumps({
-        "agent": agent_name,
-        "on_behalf_of": on_behalf_of,
-        "note": note
-    }).encode("utf-8")
-
-    try:
-        req = urllib.request.Request(
-            config.checkin_url,
-            data=payload,
-            method="POST",
-        )
-        req.add_header("Content-Type", "application/json")
-        req.add_header("User-Agent", "AgentPass/1.0")
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.reason}"}
-    except Exception as e:
-        return {"error": str(e)}
-
 
 def get_streams() -> dict:
     """Returns the current simulation status.

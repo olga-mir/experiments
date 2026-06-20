@@ -86,7 +86,8 @@ async def trigger_webhook(app_name: str, request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    session_id = body.get("session_id", "ambient-sweep-main")
+    input_data = body.get("input", {})
+    session_id = input_data.get("session_id") or body.get("session_id", "ambient-sweep-main")
 
     session = await _session_service.get_session(
         app_name=APP_NAME, user_id="scheduler", session_id=session_id

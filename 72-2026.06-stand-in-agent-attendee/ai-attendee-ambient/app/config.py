@@ -65,11 +65,11 @@ class AgentConfiguration:
 
     @property
     def simulation_mode(self) -> bool:
-        return os.environ.get("SIMULATION_MODE", "false").lower() == "true"
+        return os.environ.get("SIMULATION_MODE", "true").lower() == "true"
 
     @property
     def conference_base_url(self) -> str:
-        return os.environ.get("CONFERENCE_BASE_URL", "MUST_BE_PROVIDED_IN_ENV_VAR")
+        return os.environ.get("CONFERENCE_BASE_URL", "")
 
     @property
     def simulation_base_url(self) -> str:

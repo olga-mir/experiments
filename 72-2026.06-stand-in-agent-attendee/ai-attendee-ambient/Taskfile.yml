@@ -193,7 +193,7 @@ tasks:
           --format="table(timestamp,textPayload)"
 
   schedule:
-    desc: Schedule the ambient agent to run every 5 minutes using Cloud Scheduler
+    desc: Schedule the ambient agent to run periodically using Cloud Scheduler
     deps: [preflight]
     vars:
       SA_EMAIL: "ambient-attendee-scheduler@{{.PROJECT_ID}}.iam.gserviceaccount.com"
@@ -240,7 +240,7 @@ tasks:
         if gcloud scheduler jobs describe ambient-cron --location="{{.SCHEDULER_LOCATION}}" >/dev/null 2>&1; then
           echo "Updating existing scheduler job..."
           gcloud scheduler jobs update http ambient-cron \
-            --schedule="*/5 * * * *" \
+            --schedule="*/1 * * * *" \
             --uri="${TARGET_URI}" \
             --http-method=POST \
             --update-headers="Content-Type=application/json" \
@@ -250,7 +250,7 @@ tasks:
         else
           echo "Creating new scheduler job..."
           gcloud scheduler jobs create http ambient-cron \
-            --schedule="*/5 * * * *" \
+            --schedule="*/1 * * * *" \
             --uri="${TARGET_URI}" \
             --http-method=POST \
             --headers="Content-Type=application/json" \
