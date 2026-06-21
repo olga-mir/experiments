@@ -77,3 +77,10 @@ Key details:
 - **`input` envelope:** The Reasoning Engine API wraps all method arguments under `input`.
 - **Persistent session:** The session must be created first via `task session:create`. The ID is saved to `.ambient_session_id` and picked up automatically by `task schedule`.
 - **SA permissions:** `ambient-attendee-scheduler@<project>.iam.gserviceaccount.com` needs `roles/aiplatform.user`.
+
+## Session Reset vs. Simulation Reset
+
+Because you may want to demo both agents (`ambient` and `standard`) during a presentation without losing session history, the agent's Vertex AI ADK sessions are decoupled from the backend simulation timeline.
+- **To reset the simulation clock (set stream back to 0.0)**: Run `task session:reset` in the `72-2026.06-stand-in-agent-backend-sim/` directory.
+- **To create a new agent session**: Run `task session:create` in the agent folder (this will generate a fresh persistent session on Vertex AI without deleting past sessions).
+- **Do not use `task session:reset` in the agent directory** if you wish to preserve the history of your previous test runs.

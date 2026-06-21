@@ -1,5 +1,16 @@
 version: '3'
 
+vars:
+  PROJECT_ID:
+    sh: gcloud config get-value project 2>/dev/null || echo $GCP_PROJECT_ID
+  SIM_URL:
+    sh: |
+      if [ -n "{{.PROJECT_ID}}" ]; then
+        gcloud run services describe mock-transcript-server --project="{{.PROJECT_ID}}" --region=us-central1 --format="value(status.url)" 2>/dev/null || echo "http://localhost:8000"
+      else
+        echo "http://localhost:8000"
+      fi
+
 tasks:
   preflight:
     desc: Check required environment variables and tools
@@ -78,6 +89,12 @@ tasks:
       - |
         RESP=$(curl -sf "{{.URL}}/streams") || { echo "Error: no response from {{.URL}} — is the server running? Set SIM_URL for Cloud Run."; exit 1; }
         echo "$RESP" | python3 -m json.tool
+
+  session:reset:
+    desc: Reset the backend simulation session clock back to 0.0 (equivalent to starting a fresh stream)
+    cmds:
+      - task: sim-start
+
 
   setup-infra:
     desc: Enable required GCP APIs and setup IAM permissions for Cloud Run / Cloud Build

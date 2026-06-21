@@ -42,3 +42,10 @@ SIM_SPEED=10 GCP_PROJECT_ID=<proj> task deploy
 ## Key constraint
 
 Single-track, single-client design. No auth. CORS open. Intended for local or private Cloud Run use only.
+
+## Session Reset vs. Agent Session
+
+The simulation clock runs globally based on the container lifecycle and manual start triggers, decoupled from any specific Vertex AI agent session.
+- **To reset the simulation back to 0.0**: Run `task session:reset` in this directory (which curls `/sim/start`). This is helpful during presentations to restart the conference stream timeline for standard and ambient agents.
+- **Agent Sessions**: On the agent side, use `task session:create` to start fresh ADK sessions without losing history of previous test runs.
+
