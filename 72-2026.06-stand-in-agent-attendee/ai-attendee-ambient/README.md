@@ -24,15 +24,15 @@ ai-attendee-ambient/
 - `uv` — `brew install uv`
 - `agents-cli` — `uv tool install google-agents-cli`
 - `task` — `brew install go-task`
-- `gcloud` — authenticated, project set to `gdg-june-playground`
+- `gcloud` — authenticated, project set to your GCP project
 
 ## Configuration (`.setup-env`)
 
 ```bash
-export GCP_PROJECT_ID=gdg-june-playground
-export SIMULATION_BASE_URL=https://mock-transcript-server-471108326825.us-central1.run.app
+export GCP_PROJECT_ID=<your-project-id>
+export SIMULATION_BASE_URL=<cloud-run-url-from-backend-sim-deploy>
 export SIMULATION_MODE=true
-export AGENT_ENGINE_RESOURCE=projects/471108326825/locations/us-east1/reasoningEngines/<engine-id>
+export AGENT_ENGINE_RESOURCE=projects/<project-number>/locations/us-east1/reasoningEngines/<engine-id>
 ```
 
 `AGENT_ENGINE_RESOURCE` enables persistent sessions across Scheduler ticks (VertexAiSessionService).
@@ -59,7 +59,7 @@ task deploy
 
 After the first deploy, copy the resource name from `deployment_metadata.json`:
 ```bash
-export AGENT_ENGINE_RESOURCE=projects/471108326825/locations/us-east1/reasoningEngines/<new-id>
+export AGENT_ENGINE_RESOURCE=projects/<project-number>/locations/us-east1/reasoningEngines/<new-id>
 ```
 Add it to `.setup-env`, then redeploy so the agent picks up persistent sessions:
 ```bash
@@ -102,7 +102,7 @@ the session ID to `.ambient_session_id`. The `schedule` task reads this file aut
 `AGENT_URL` is the Vertex AI Agent Engine base resource URL (v1, not v1beta1):
 
 ```bash
-export AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/471108326825/locations/us-east1/reasoningEngines/<engine-id>
+export AGENT_URL=https://us-east1-aiplatform.googleapis.com/v1/projects/<project-number>/locations/us-east1/reasoningEngines/<engine-id>
 task schedule
 ```
 
