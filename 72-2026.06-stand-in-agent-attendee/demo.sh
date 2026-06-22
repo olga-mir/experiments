@@ -24,6 +24,15 @@ PROJECT_ID="${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 SIM_URL="${SIMULATION_BASE_URL:-http://localhost:8000}"
 SCHEDULER_LOCATION="${GOOGLE_CLOUD_LOCATION:-us-central1}"
 
+# Derive AGENT_URL from AGENT_ENGINE_RESOURCE (projects/<num>/locations/<loc>/reasoningEngines/<id>)
+# Used by `task schedule` to update the scheduler job body with the current session ID.
+if [ -n "${AGENT_ENGINE_RESOURCE:-}" ]; then
+  _loc=$(echo "$AGENT_ENGINE_RESOURCE" | sed 's|.*locations/\([^/]*\)/.*|\1|')
+  AGENT_URL="https://${_loc}-aiplatform.googleapis.com/v1/${AGENT_ENGINE_RESOURCE}"
+else
+  AGENT_URL=""
+fi
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 divider() {
   echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
@@ -79,9 +88,16 @@ echo -e "${RESET}"
 echo -e "  Project:   ${BOLD}${PROJECT_ID:-NOT SET}${RESET}"
 echo -e "  Sim URL:   ${BOLD}${SIM_URL}${RESET}"
 echo -e "  Scheduler: ${BOLD}${SCHEDULER_LOCATION}${RESET}"
+echo -e "  Agent URL: ${BOLD}${AGENT_URL:-NOT SET (set AGENT_ENGINE_RESOURCE in .setup-env)}${RESET}"
 echo ""
 if [ -z "$PROJECT_ID" ]; then
   echo -e "  ${RED}⚠  GCP_PROJECT_ID not set. Set it in ${AMBIENT_DIR}/.setup-env${RESET}"
+  echo ""
+fi
+if [ -z "$AGENT_URL" ]; then
+  echo -e "  ${RED}⚠  AGENT_ENGINE_RESOURCE not set — Step 1 re-wiring will be skipped.${RESET}"
+  echo -e "     Add it to ${AMBIENT_DIR}/.setup-env, e.g.:"
+  echo -e "     export AGENT_ENGINE_RESOURCE=projects/<num>/locations/us-east1/reasoningEngines/<id>"
   echo ""
 fi
 read -rp "  Ready? Press Enter to start... " _
@@ -97,6 +113,12 @@ info "Each Scheduler tick reuses the same session → no duplicate captions."
 info "Session ID saved to: ai-attendee-ambient/.ambient_session_id"
 echo ""
 run_step "Create ambient session" "task session:create" "$AMBIENT_DIR"
+echo ""
+info "The scheduler job body still holds the OLD session ID until we update it."
+info "Running 'task schedule' rewrites the job's message body with the new session ID."
+echo ""
+run_step "Re-wire scheduler with new session ID" \
+  "AGENT_URL='${AGENT_URL}' task schedule" "$AMBIENT_DIR"
 pause
 
 # -----------------------------------------------------------------------------
@@ -112,11 +134,14 @@ run_step "Verify stream is live" \
 pause
 
 # -----------------------------------------------------------------------------
-step 3 "Fire the Cloud Scheduler job (first ambient tick)"
-info "This manually triggers ambient-cron without waiting for its schedule."
-info "The ambient agent wakes up, checks /streams, fetches /transcript, emits alerts."
+step 3 "Resume + fire the Cloud Scheduler job"
+info "The job starts in a paused state. Resume enables auto-ticks (every minute)."
+info "Then we trigger one tick manually so the agent runs immediately on stage."
 echo ""
-run_step "Trigger scheduler job" \
+run_step "Resume scheduler job" \
+  "gcloud scheduler jobs resume ambient-cron --location='${SCHEDULER_LOCATION}' --project='${PROJECT_ID}'"
+echo ""
+run_step "Trigger one tick now (no need to wait for the minute boundary)" \
   "gcloud scheduler jobs run ambient-cron --location='${SCHEDULER_LOCATION}' --project='${PROJECT_ID}'" \
   "$AMBIENT_DIR"
 echo ""
