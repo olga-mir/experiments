@@ -15,7 +15,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from rank_bm25 import BM25Okapi
+import bm25s
+from bm25s.tokenization import Tokenizer
 
 # ── tuning knobs ─────────────────────────────────────────────────────────────
 MAX_FILE_BYTES = 80_000   # skip files larger than this (avoids lock-files etc.)
@@ -57,7 +58,8 @@ class RepoKnowledgeIndex:
     def __init__(self, repo_path: str = "."):
         self.repo_path = Path(repo_path).resolve()
         self.chunks: list[dict[str, Any]] = []
-        self._bm25: BM25Okapi | None = None
+        self._bm25: bm25s.BM25 | None = None
+        self._tokenizer: Tokenizer | None = None
         self._built = False
         self._seen_paths: set[str] = set()  # dedup across collectors
 
@@ -77,8 +79,12 @@ class RepoKnowledgeIndex:
                 "Check that the path is a git repo with at least one README or manifest."
             )
 
-        tokenized = [_tokenize(c["text"]) for c in self.chunks]
-        self._bm25 = BM25Okapi(tokenized)
+        self._tokenizer = Tokenizer(lower=False, splitter=_tokenize, stopwords=None)
+        corpus_tokens = self._tokenizer.tokenize(
+            [c["text"] for c in self.chunks], update_vocab=True, show_progress=False
+        )
+        self._bm25 = bm25s.BM25()
+        self._bm25.index(corpus_tokens)
         self._built = True
         return self
 
@@ -96,17 +102,16 @@ class RepoKnowledgeIndex:
         if not self._built:
             self.build()
 
-        tokens = _tokenize(query)
-        scores = self._bm25.get_scores(tokens)
+        query_tokens = self._tokenizer.tokenize([query], update_vocab=False, show_progress=False)
+        k = min(top_k, len(self.chunks))
+        results_idx, scores_arr = self._bm25.retrieve(query_tokens, k=k)
 
-        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[:top_k]
         results = []
-        for idx, score in ranked:
+        for doc_idx, score in zip(results_idx[0], scores_arr[0]):
             if score > 0.0:
-                chunk = dict(self.chunks[idx])
+                chunk = dict(self.chunks[int(doc_idx)])
                 chunk["score"] = round(float(score), 4)
                 results.append(chunk)
-
         return results
 
     def stats(self) -> dict[str, Any]:

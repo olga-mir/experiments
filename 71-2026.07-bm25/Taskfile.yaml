@@ -1,0 +1,37 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  REPO: '{{.REPO_PATH | default "."}}'
+
+tasks:
+  preflight:
+    desc: Validate environment variables
+    internal: true
+    cmds:
+      - |
+        if [ -z "$REPO_PATH" ]; then
+          echo "WARN: REPO_PATH not set — defaulting to current directory"
+        fi
+
+  install:
+    desc: Install dependencies with uv
+    cmds:
+      - uv sync
+
+  search:
+    desc: 'BM25 search over repo knowledge — task search -- "your query" [--top-k N] [--json] [--stats]'
+    cmds:
+      - uv run cli.py {{.CLI_ARGS}} --repo '{{.REPO}}'
+
+  stats:
+    desc: Show BM25 index statistics for REPO_PATH
+    cmds:
+      - uv run cli.py --stats --repo '{{.REPO}}'
+
+  mcp:
+    desc: Start the BM25 MCP server (set REPO_PATH in .env)
+    cmds:
+      - task: preflight
+      - uv run mcp_server.py

@@ -1,0 +1,8 @@
+[project]
+name = "bm25-repo-search"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "bm25s>=0.2.8",
+    "fastmcp>=2.0.0",
+]
