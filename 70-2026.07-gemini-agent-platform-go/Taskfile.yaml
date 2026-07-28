@@ -1,0 +1,90 @@
+version: "3"
+
+vars:
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID}"
+  REGION: us-central1
+  AR_REPO: llm-auditor
+  IMAGE_NAME: llm-auditor
+  IMAGE_TAG: latest
+  IMAGE_URI:
+    sh: echo "{{.REGION}}-docker.pkg.dev/${PROJECT_ID}/{{.AR_REPO}}/{{.IMAGE_NAME}}:{{.IMAGE_TAG}}"
+  AGENT_DISPLAY_NAME: llm-auditor
+
+tasks:
+  preflight:
+    desc: Check required tools, GCP auth, and environment variables
+    cmds:
+      - |
+        [ -n "${PROJECT_ID}" ] || (echo "ERROR: PROJECT_ID env var is required" && exit 1)
+      - |
+        for cmd in docker gcloud uv; do
+          command -v $cmd >/dev/null 2>&1 || (echo "ERROR: $cmd not found" && exit 1)
+        done
+      - gcloud auth print-access-token --project=${PROJECT_ID} >/dev/null
+
+  setup-ar:
+    desc: Create Artifact Registry repo if it doesn't exist and configure Docker auth
+    cmds:
+      - |
+        gcloud artifacts repositories describe {{.AR_REPO}} \
+          --location={{.REGION}} --project=${PROJECT_ID} >/dev/null 2>&1 \
+        || gcloud artifacts repositories create {{.AR_REPO}} \
+          --repository-format=docker \
+          --location={{.REGION}} \
+          --project=${PROJECT_ID}
+      - gcloud auth configure-docker {{.REGION}}-docker.pkg.dev --quiet
+
+  build:
+    desc: Build the Docker image for linux/amd64 (Agent Engine target platform)
+    dir: llm-auditor
+    cmds:
+      - docker build --platform linux/amd64 -t {{.IMAGE_URI}} .
+
+  push:
+    desc: Push the image to Artifact Registry
+    deps: [setup-ar]
+    cmds:
+      - docker push {{.IMAGE_URI}}
+
+  build-push:
+    desc: Build and push the Docker image
+    cmds:
+      - task: build
+      - task: push
+
+  deploy:
+    desc: Deploy to Gemini Enterprise Agent Platform (Agent Engine)
+    cmds:
+      - uv run deploy.py --image-uri {{.IMAGE_URI}} --project ${PROJECT_ID} --location {{.REGION}} --display-name {{.AGENT_DISPLAY_NAME}}
+
+  update:
+    desc: Update existing agent engine (reads resource-id from deployment_metadata.json)
+    cmds:
+      - |
+        RESOURCE_ID=$(python3 -c "import json; print(json.load(open('deployment_metadata.json'))['resource_id'])")
+        uv run deploy.py --image-uri {{.IMAGE_URI}} --project ${PROJECT_ID} --location {{.REGION}} --display-name {{.AGENT_DISPLAY_NAME}} --resource-id $RESOURCE_ID
+
+  all:
+    desc: Build, push, and deploy
+    cmds:
+      - task: preflight
+      - task: build-push
+      - task: deploy
+
+  run-local:
+    desc: Run the agent locally serving the agentengine API (in-memory sessions, port 8080)
+    dir: llm-auditor
+    cmds:
+      - go run ./cmd web agentengine
+
+  docker-run-local:
+    desc: Run the container locally serving the agentengine API on port 8080
+    cmds:
+      - |
+        docker run --rm -it \
+          -e GOOGLE_APPLICATION_CREDENTIALS=/gac.json \
+          -e GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
+          -v $HOME/.config/gcloud/application_default_credentials.json:/gac.json:ro \
+          -p 8080:8080 \
+          {{.IMAGE_URI}}

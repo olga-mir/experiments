@@ -16,36 +16,54 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"llmauditor/auditor"
+	"log"
+	"os"
 
-	"google.golang.org/adk/agent"
-	"google.golang.org/adk/artifact"
-	"google.golang.org/adk/cmd/launcher/adk"
-	"google.golang.org/adk/cmd/launcher/web"
-	"google.golang.org/adk/cmd/restapi/services"
-	"google.golang.org/adk/session"
+	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/cmd/launcher"
+	"google.golang.org/adk/v2/cmd/launcher/agentengine"
+	"google.golang.org/adk/v2/session"
+	vertexaisession "google.golang.org/adk/v2/session/vertexai"
+
+	"llmauditor/auditor"
 )
 
 func main() {
 	ctx := context.Background()
-	llmAuditorAgent := auditor.GetLLmAuditorAgent(ctx)
 
-	sessionService := session.InMemoryService()
-	artifactservice := artifact.InMemoryService()
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	location := os.Getenv("GOOGLE_CLOUD_AGENT_ENGINE_LOCATION")
+	if location == "" {
+		location = "us-central1"
+	}
+	agentEngineID := os.Getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")
 
-	agentLoader := services.NewStaticAgentLoader(
-		llmAuditorAgent,
-		map[string]agent.Agent{
-			"llm_auditor": llmAuditorAgent,
-		},
-	)
+	llmAuditorAgent := auditor.GetLLmAuditorAgent(ctx, projectID, location)
 
-	webConfig, _, _ := web.ParseArgs([]string{})
-	fmt.Println(webConfig)
-	web.Serve(webConfig, &adk.Config{
-		SessionService:  sessionService,
-		AgentLoader:     agentLoader,
-		ArtifactService: artifactservice,
-	})
+	var sessionService session.Service
+	if projectID != "" && location != "" && agentEngineID != "" {
+		var err error
+		sessionService, err = vertexaisession.NewSessionService(ctx, vertexaisession.VertexAIServiceConfig{
+			ProjectID:       projectID,
+			Location:        location,
+			ReasoningEngine: agentEngineID,
+		})
+		if err != nil {
+			log.Printf("Warning: VertexAI session service unavailable (%v), falling back to in-memory sessions", err)
+			sessionService = session.InMemoryService()
+		}
+	} else {
+		log.Println("Agent Engine env vars not set, using in-memory sessions")
+		sessionService = session.InMemoryService()
+	}
+
+	config := &launcher.Config{
+		SessionService: sessionService,
+		AgentLoader:    agent.NewSingleLoader(llmAuditorAgent),
+	}
+
+	l := agentengine.NewLauncher(agentEngineID)
+	if err := l.Execute(ctx, config, os.Args[1:]); err != nil {
+		log.Fatalf("Run failed: %v\n\n%s", err, l.CommandLineSyntax())
+	}
 }

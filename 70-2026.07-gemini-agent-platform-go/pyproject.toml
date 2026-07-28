@@ -1,0 +1,10 @@
+[project]
+name = "llm-auditor-deploy"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "google-cloud-aiplatform[adk,agent_engines]>=1.93.0",
+]
+
+[tool.uv]
+dev-dependencies = []

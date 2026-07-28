@@ -16,18 +16,24 @@ package auditor
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
-	"google.golang.org/adk/agent"
-	"google.golang.org/adk/runner"
-	"google.golang.org/adk/session"
+	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/runner"
+	"google.golang.org/adk/v2/session"
 	"google.golang.org/genai"
 )
 
 func TestHappyPath(t *testing.T) {
 	ctx := context.Background()
-	llmAuditorAgent := GetLLmAuditorAgent(ctx)
+	project := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	location := os.Getenv("GOOGLE_CLOUD_LOCATION")
+	if location == "" {
+		location = "us-central1"
+	}
+	llmAuditorAgent := GetLLmAuditorAgent(ctx, project, location)
 
 	sessionService := session.InMemoryService()
 	config := runner.Config{

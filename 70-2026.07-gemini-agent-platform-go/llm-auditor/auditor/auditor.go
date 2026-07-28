@@ -17,17 +17,21 @@ package auditor
 import (
 	"context"
 
-	"google.golang.org/adk/agent"
-	"google.golang.org/adk/agent/workflowagents/sequentialagent"
-	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/agent/workflowagents/sequentialagent"
+	"google.golang.org/adk/v2/model/gemini"
 	"google.golang.org/genai"
 
 	"llmauditor/critic"
 	"llmauditor/reviser"
 )
 
-func GetLLmAuditorAgent(ctx context.Context) agent.Agent {
-	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{})
+func GetLLmAuditorAgent(ctx context.Context, projectID, location string) agent.Agent {
+	model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
+		Backend:  genai.BackendVertexAI,
+		Project:  projectID,
+		Location: location,
+	})
 	if err != nil {
 		panic(err)
 	}
