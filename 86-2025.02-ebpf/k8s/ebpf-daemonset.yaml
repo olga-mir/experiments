@@ -25,12 +25,22 @@ spec:
       containers:
       - name: my-ebpf
         image: ${IMAGE_PATH}:${GIT_COMMIT}
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
         securityContext:
           privileged: true  # Required for eBPF operations
         volumeMounts:
         - name: sys-kernel-debug
           mountPath: /sys/kernel/debug
+        - name: sys-fs-cgroup
+          mountPath: /sys/fs/cgroup
+          readOnly: true
       volumes:
       - name: sys-kernel-debug
         hostPath:
           path: /sys/kernel/debug
+      - name: sys-fs-cgroup
+        hostPath:
+          path: /sys/fs/cgroup

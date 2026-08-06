@@ -47,6 +47,11 @@ tasks:
       - >
         IMAGE={{.FULL_IMAGE_TAG}} envsubst < k8s/ebpf-daemonset.yaml | kubectl apply -f -
 
+  deploy-monitoring:
+    desc: Deploy PodMonitoring CRD for GKE Managed Prometheus (requires GCMP enabled on the cluster)
+    cmds:
+      - kubectl apply -f k8s/pod-monitoring.yaml
+
   docker-auth:
     desc: Configure Docker authentication for Artifact Registry.
     # while this can be done inside lima with some effort, it is just easier to do from local:
