@@ -98,10 +98,9 @@ The cgroup labels will look like `pod/abc12345/cri12345` (pod-uid prefix + conta
 
 I've documented some learnings in [./outcomes](./outcomes) folder.
 
-Currently this project successfully builds, deploys to k8s environment and collects data in eBPF maps. There is no user-space code yet that reads this data and exports this as metrics. This is WIP.
+The project builds, deploys to GKE as a daemonset, collects run-queue latency data in eBPF maps, and exports it as Prometheus metrics via a ring buffer consumer in the Go userspace program.
 
+# Note on Cloud Run
 
-# Cloud Run
-
-Cloud Run does not officially support eBPF, and currently there is no public commitment to support it in the future:
-https://issuetracker.google.com/issues/206477810?pli=1
+Cloud Run was considered as a deployment target early on. It does not support eBPF and there is no public commitment to add support:
+https://issuetracker.google.com/issues/206477810
