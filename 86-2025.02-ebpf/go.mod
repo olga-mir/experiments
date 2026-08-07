@@ -3,7 +3,7 @@ module ebpf-hello
 go 1.25.0
 
 require (
-	github.com/cilium/ebpf v0.17.1
+	github.com/cilium/ebpf v0.22.0
 	github.com/prometheus/client_golang v1.24.1
 )
 

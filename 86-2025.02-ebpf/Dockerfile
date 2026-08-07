@@ -1,4 +1,4 @@
-FROM golang:1.23 AS builder
+FROM golang:1.25 AS builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
