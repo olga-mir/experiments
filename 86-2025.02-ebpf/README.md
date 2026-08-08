@@ -99,6 +99,9 @@ The cgroup labels will look like `pod/abc12345/cri12345` (pod-uid prefix + conta
 I've documented some learnings in [./outcomes](./outcomes) folder.
 
 The project builds, deploys to GKE as a daemonset, collects run-queue latency data in eBPF maps, and exports it as Prometheus metrics via a ring buffer consumer in the Go userspace program.
+![Setup works – proof of concept](outcomes/gcp-dashboard-noisy-neighbour.png)
+
+*Note: this is in progress, but this is proof that the setup works and more analysis will follow soon.*
 
 # Note on Cloud Run
 

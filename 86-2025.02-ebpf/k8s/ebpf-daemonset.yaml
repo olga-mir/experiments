@@ -24,7 +24,7 @@ spec:
       hostPID: true  # Required to access host syscalls
       containers:
       - name: my-ebpf
-        image: ${IMAGE_PATH}:${GIT_COMMIT}
+        image: ${IMAGE}
         ports:
         - name: metrics
           containerPort: 9090
