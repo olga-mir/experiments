@@ -88,11 +88,30 @@ If fortio isn't deployed separately, perf-lab itself can be the source since it 
 
 ## View in Cloud Monitoring
 
-Metrics Explorer → query:
-- `prometheus.googleapis.com/ebpf_runq_latency_nanoseconds/histogram`: group by cgroup to see which pods are experiencing the most scheduling delay
-- `prometheus.googleapis.com/ebpf_events_total`: confirms data is flowing
+Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. The dashboard requires two filters to be set before data appears:
 
-The cgroup labels will look like `pod/abc12345/cri12345` (pod-uid prefix + container-id prefix).
+- **ebpf_node** — the eBPF DaemonSet pod name (one per node). Scopes all charts to a single node; mixing nodes makes the data unreadable since scheduling is per-node.
+- **cgroup_pod** — (Noisy Neighbour section only) the victim pod to investigate, in `pod/<uid-prefix>/<cid-prefix>` form.
+
+To find a pod's cgroup label:
+```bash
+kubectl get pod <name> -o jsonpath='{.metadata.uid}' | cut -c1-8
+# use result as uid-prefix in pod/<uid-prefix>
+```
+
+Key metrics:
+- `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s.
+- `ebpf_events_total` — confirms data is flowing from the eBPF ring buffer.
+
+Dashboard panels use `histogram_quantile` over PromQL — not the raw histogram aggregation — to get accurate p50/p99 percentiles. Example noisy-neighbour query (who is preempting pod X?):
+```promql
+histogram_quantile(
+  0.99,
+  sum by (prev_cgroup, le) (
+    rate(ebpf_runq_latency_nanoseconds_bucket{pod=~"<ebpf-pod>", cgroup=~"pod/<uid>/.*"}[5m])
+  )
+) / 1e6
+```
 
 ## Outcomes
 

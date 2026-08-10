@@ -112,7 +112,8 @@ func (m *cgroupMapper) name(id uint64) string {
 //
 // We extract pod-uid prefix and container-id prefix to keep cardinality low.
 func cgroupLabel(path string) string {
-	rel := strings.TrimPrefix(path, cgroupRoot+"/")
+	rel := strings.TrimPrefix(strings.TrimSuffix(path, "/"), cgroupRoot)
+	rel = strings.TrimPrefix(rel, "/")
 	if rel == "" {
 		return "root"
 	}
