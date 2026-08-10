@@ -15,8 +15,5 @@ spec:
   - port: metrics
     interval: 15s
     path: /metrics
-    metricRelabeling:
-    - sourceLabels: [__name__]
-      regex: "(ebpf_.*|go_.*|process_.*)"
-      action: keep
+
 
