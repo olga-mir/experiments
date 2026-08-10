@@ -32,7 +32,7 @@ var (
 	runqLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ebpf_runq_latency_nanoseconds",
 		Help:    "Run queue latency in nanoseconds, labeled by the scheduled cgroup and the cgroup it preempted",
-		Buckets: prometheus.ExponentialBuckets(1_000, 2, 20), // 1µs → ~1s
+		Buckets: prometheus.ExponentialBuckets(1_000, 2, 24), // 1µs → ~8s
 	}, []string{"cgroup", "prev_cgroup"})
 
 	eventsTotal = promauto.NewCounter(prometheus.CounterOpts{

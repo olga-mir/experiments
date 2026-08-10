@@ -1,6 +1,14 @@
 {
   "displayName": "GKE eBPF",
-  "dashboardFilters": [],
+  "dashboardFilters": [
+    {
+      "labelKey": "cgroup",
+      "filterType": "METRIC_LABEL",
+      "templateVariable": "cgroup_pod",
+      "valueType": "STRING",
+      "stringValue": ""
+    }
+  ],
   "description": "",
   "labels": {},
   "mosaicLayout": {
@@ -203,6 +211,54 @@
             "thresholds": [],
             "yAxis": {
               "label": "",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "yPos": 48,
+        "height": 16,
+        "width": 48,
+        "widget": {
+          "title": "Noisy Neighbour Analysis",
+          "collapsibleGroup": {
+            "collapsed": false
+          }
+        }
+      },
+      {
+        "yPos": 48,
+        "height": 16,
+        "width": 48,
+        "widget": {
+          "title": "Noisy neighbours for selected pod — p99 latency by prev_cgroup (ms)",
+          "id": "",
+          "xyChart": {
+            "chartOptions": {
+              "displayHorizontal": false,
+              "mode": "COLOR",
+              "showLegend": true
+            },
+            "dataSets": [
+              {
+                "breakdowns": [],
+                "dimensions": [],
+                "legendTemplate": "",
+                "measures": [],
+                "plotType": "LINE",
+                "sort": [],
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "outputFullDuration": false,
+                  "prometheusQuery": "histogram_quantile(\n  0.99,\n  sum by (prev_cgroup, le) (\n    rate(ebpf_runq_latency_nanoseconds_bucket{cgroup=~\"${cgroup_pod.value}\"}[5m])\n  )\n) / 1e6",
+                  "unitOverride": "ms"
+                }
+              }
+            ],
+            "thresholds": [],
+            "yAxis": {
+              "label": "latency (ms)",
               "scale": "LINEAR"
             }
           }
