@@ -15,3 +15,7 @@ spec:
   - port: metrics
     interval: 15s
     path: /metrics
+    metricRelabeling:
+    - sourceLabels: [cgroup]
+      regex: "pod/.*|"
+      action: keep

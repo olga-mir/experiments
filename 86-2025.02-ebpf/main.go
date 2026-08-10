@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -102,7 +101,7 @@ func (m *cgroupMapper) name(id uint64) string {
 	if label, ok := m.byIno[id&0xFFFFFFFF]; ok {
 		return label
 	}
-	return fmt.Sprintf("cgroup_%x", id)
+	return "unresolved"
 }
 
 // cgroupLabel derives a concise Prometheus-friendly label from a cgroup path.
@@ -226,9 +225,12 @@ func main() {
 			log.Printf("parse event: %v", err)
 			continue
 		}
-		runqLatency.
-			WithLabelValues(mapper.name(ev.CgroupID), mapper.name(ev.PrevCgroupID)).
-			Observe(float64(ev.RunqLat))
+		cgroup := mapper.name(ev.CgroupID)
+		if strings.HasPrefix(cgroup, "pod/") {
+			runqLatency.
+				WithLabelValues(cgroup, mapper.name(ev.PrevCgroupID)).
+				Observe(float64(ev.RunqLat))
+		}
 		eventsTotal.Inc()
 	}
 }
