@@ -16,6 +16,7 @@ spec:
     interval: 15s
     path: /metrics
     metricRelabeling:
-    - sourceLabels: [cgroup]
-      regex: "pod/.*|"
+    - sourceLabels: [__name__]
+      regex: "(ebpf_.*|go_.*|process_.*)"
       action: keep
+

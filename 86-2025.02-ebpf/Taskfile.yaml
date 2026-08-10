@@ -82,7 +82,13 @@ tasks:
     cmds:
       - kubectl apply -f k8s/pod-monitoring.yaml
 
+  list-pod-cgroups:
+    desc: List pods grouped by node with their eBPF metric cgroup label (pod/UID/CID)
+    cmds:
+      - ./list-cgroup-labels.sh
+
   help:
     desc: Show list of available tasks and their descriptions
     cmds:
       - task --list
+

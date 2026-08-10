@@ -216,16 +216,16 @@ func main() {
 			return
 		case <-ticker.C:
 			var (
-				key   runqHistKey
-				val   uint64
-				iter  = objs.RunqHistograms.Iterate()
-				total uint64
+				key       runqHistKey
+				val       uint64
+				iter      = objs.RunqHistograms.Iterate()
+				newEvents uint64
 			)
 			for iter.Next(&key, &val) {
-				total += val
 				diff := val - prevCounts[key]
 				if diff > 0 {
 					prevCounts[key] = val
+					newEvents += diff
 					cgroup := mapper.name(key.CgroupID)
 					if strings.HasPrefix(cgroup, "pod/") {
 						prevCgroup := mapper.name(key.PrevCgroupID)
@@ -243,7 +243,9 @@ func main() {
 			if err := iter.Err(); err != nil {
 				log.Printf("Error iterating BPF histogram map: %v", err)
 			}
-			eventsTotal.Add(float64(total))
+			if newEvents > 0 {
+				eventsTotal.Add(float64(newEvents))
+			}
 		}
 	}
 }

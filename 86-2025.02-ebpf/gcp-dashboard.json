@@ -71,7 +71,7 @@
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "prometheusQuery": "rate(ebpf_events_total{pod=~\"${ebpf_node.value}\"}[1m])",
+                  "prometheusQuery": "sum(rate(ebpf_events_total[1m]))",
                   "unitOverride": ""
                 }
               }
