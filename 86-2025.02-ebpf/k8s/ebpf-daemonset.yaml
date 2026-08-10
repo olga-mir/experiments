@@ -10,20 +10,20 @@ spec:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: my-ebpf
+  name: ebpf-ds
   namespace: test-ebpf
 spec:
   selector:
     matchLabels:
-      app: my-ebpf
+      app: ebpf-ds
   template:
     metadata:
       labels:
-        app: my-ebpf
+        app: ebpf-ds
     spec:
       hostPID: true  # Required to access host syscalls
       containers:
-      - name: my-ebpf
+      - name: ebpf-ds
         image: ${IMAGE}
         ports:
         - name: metrics
