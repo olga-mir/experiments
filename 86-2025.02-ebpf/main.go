@@ -118,7 +118,7 @@ func cgroupLabel(path string) string {
 	}
 	parts := strings.Split(rel, "/")
 	for i, p := range parts {
-		for _, qos := range []string{"kubepods-burstable-pod", "kubepods-besteffort-pod", "kubepods-guaranteed-pod", "pod"} {
+		for _, qos := range []string{"kubepods-burstable-pod", "kubepods-besteffort-pod", "kubepods-guaranteed-pod", "kubepods-pod", "pod"} {
 			if strings.HasPrefix(p, qos) {
 				uid := shortID(strings.TrimSuffix(strings.TrimPrefix(p, qos), ".slice"))
 				if i+1 < len(parts) {

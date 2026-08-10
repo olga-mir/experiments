@@ -10,7 +10,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: my-ebpf
+      app: ebpf-ds
   endpoints:
   - port: metrics
     interval: 15s
