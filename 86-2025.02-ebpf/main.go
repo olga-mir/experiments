@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
-	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -16,7 +13,6 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -187,12 +183,6 @@ func main() {
 	}
 	defer switchLink.Close()
 
-	rd, err := ringbuf.NewReader(objs.Events)
-	if err != nil {
-		log.Fatalf("Failed to open ring buffer: %v", err)
-	}
-	defer rd.Close()
-
 	mapper := newCgroupMapper()
 
 	go func() {
@@ -203,34 +193,58 @@ func main() {
 
 	stopper := make(chan os.Signal, 1)
 	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-stopper
-		rd.Close()
-	}()
 
-	log.Println("Collecting run-queue events from eBPF ring buffer...")
+	log.Println("Polling run-queue latency histograms from eBPF map...")
 
-	var ev runqEvent
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	// Track cumulative counts exported per key (cgroup, prev_cgroup, bucket_latency_upper_bound)
+	prevCounts := make(map[runqHistKey]uint64)
+
+	// Bucket bounds matching ExponentialBuckets(1000, 2, 24) in nanoseconds
+	bucketBounds := make([]float64, 24)
+	bound := 1000.0 // 1 µs
+	for i := 0; i < 24; i++ {
+		bucketBounds[i] = bound
+		bound *= 2.0
+	}
+
 	for {
-		rec, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				log.Println("Shutting down")
-				return
+		select {
+		case <-stopper:
+			log.Println("Shutting down")
+			return
+		case <-ticker.C:
+			var (
+				key   runqHistKey
+				val   uint64
+				iter  = objs.RunqHistograms.Iterate()
+				total uint64
+			)
+			for iter.Next(&key, &val) {
+				total += val
+				diff := val - prevCounts[key]
+				if diff > 0 {
+					prevCounts[key] = val
+					cgroup := mapper.name(key.CgroupID)
+					if strings.HasPrefix(cgroup, "pod/") {
+						prevCgroup := mapper.name(key.PrevCgroupID)
+						latNs := bucketBounds[key.Bucket]
+						if key.Bucket >= uint32(len(bucketBounds)) {
+							latNs = bucketBounds[len(bucketBounds)-1]
+						}
+						// Add difference to histogram metric observer
+						for i := uint64(0); i < diff; i++ {
+							runqLatency.WithLabelValues(cgroup, prevCgroup).Observe(latNs)
+						}
+					}
+				}
 			}
-			log.Printf("ring buffer read error: %v", err)
-			continue
+			if err := iter.Err(); err != nil {
+				log.Printf("Error iterating BPF histogram map: %v", err)
+			}
+			eventsTotal.Add(float64(total))
 		}
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &ev); err != nil {
-			log.Printf("parse event: %v", err)
-			continue
-		}
-		cgroup := mapper.name(ev.CgroupID)
-		if strings.HasPrefix(cgroup, "pod/") {
-			runqLatency.
-				WithLabelValues(cgroup, mapper.name(ev.PrevCgroupID)).
-				Observe(float64(ev.RunqLat))
-		}
-		eventsTotal.Inc()
 	}
 }
