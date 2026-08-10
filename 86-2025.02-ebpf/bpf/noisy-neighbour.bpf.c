@@ -10,6 +10,7 @@
 #define MAX_TASK_ENTRIES 20000
 #define RINGBUF_SIZE_BYTES 16384
 #define RATE_LIMIT_NS 1000
+#define MIN_RUNQ_LAT_NS 1000000 // 1 ms threshold to record significant delays
 
 typedef __u32 u32;
 typedef __u64 u64;
@@ -89,6 +90,11 @@ int tp_sched_switch(__u64 *ctx)
 
     // delete pid from enqueued map
     bpf_map_delete_elem(&runq_enqueued, &next_pid);
+
+    // Filter out minor scheduling delays to focus on heavy-hitter noisy neighbor interference
+    if (runq_lat < MIN_RUNQ_LAT_NS) {
+        return 0;
+    }
 
     u64 prev_cgroup_id = get_task_cgroup_id(prev);
     u64 cgroup_id = get_task_cgroup_id(next);
