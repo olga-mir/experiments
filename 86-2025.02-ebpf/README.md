@@ -72,19 +72,37 @@ task deploy-monitoring  # deploys pod-monitoring.yaml
 
 When this is proved working, this can be integrated into the playground projects.
 
-## Generate load with perf-lab to create noisy neighbor pressure
+## Generate load to create noisy neighbor pressure
 
-`perf-lab` already has scenarios implemented. Hit the CPU endpoint on one replica — that saturates CPU time on the node and causes run-queue latency for everything else sharing that node:
+### Option A — self-contained cpu-stressor DaemonSet (quickest)
 
+Deploys `stress-ng` on every node. No other service needed.
+
+```bash
+kubectl apply -f k8s/cpu-stressor.yaml
+kubectl top pods -l app=cpu-stressor   # confirm ~1–2 cores burning per node
 ```
+
+Dashboard shows activity within ~1 minute (next scrape + 5 s poll).
+
+Clean up when done:
+```bash
+kubectl delete -f k8s/cpu-stressor.yaml
+```
+
+**Why the CPU request is 10m:** the dev cluster nodes are 2-vCPU and nearly fully booked by system pods. The request only affects scheduling; the limit (4 CPU) is what stress-ng actually races for, which is what drives run-queue contention.
+
+### Option B — perf-lab
+
+If `perf-lab` is deployed, hit its CPU endpoint to saturate one replica's node:
+
+```bash
 # sustained CPU load — adjust QPS/duration to taste
 fortio load -qps 50 -t 120s http://<perf-lab-svc>/cpu?iterations=100000
 
-# or the fanout scenario which spawns goroutines and creates scheduling churn
+# fanout scenario spawns goroutines and creates scheduling churn
 fortio load -qps 20 -t 120s http://<perf-lab-svc>/fanout?workers=20
 ```
-
-If fortio isn't deployed separately, perf-lab itself can be the source since it has the CPU scenario built in — two concurrent load patterns on the same node are enough to see the effect.
 
 ## View in Cloud Monitoring
 

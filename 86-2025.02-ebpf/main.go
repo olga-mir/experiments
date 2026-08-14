@@ -21,26 +21,120 @@ import (
 
 //go:generate bpf2go -cc clang -cflags "-O2 -g -Wall -Werror" bpf bpf/noisy-neighbour.bpf.c -- -I/usr/include/bpf -I/usr/include
 
-const cgroupRoot = "/sys/fs/cgroup"
-
-var (
-	runqLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ebpf_runq_latency_nanoseconds",
-		Help:    "Run queue latency in nanoseconds, labeled by the scheduled cgroup and the cgroup it preempted",
-		Buckets: prometheus.ExponentialBuckets(1_000, 2, 24), // 1µs → ~8s
-	}, []string{"cgroup", "prev_cgroup"})
-
-	eventsTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "ebpf_events_total",
-		Help: "Total ring buffer events consumed from the kernel",
-	})
+const (
+	cgroupRoot = "/sys/fs/cgroup"
+	numBuckets = 24
 )
+
+// bucketBoundsNs[b] = 1000 * 2^b nanoseconds, matching ExponentialBuckets(1000, 2, 24).
+var bucketBoundsNs = func() [numBuckets]float64 {
+	var b [numBuckets]float64
+	v := 1000.0
+	for i := range b {
+		b[i] = v
+		v *= 2
+	}
+	return b
+}()
+
+var eventsTotal = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "ebpf_events_total",
+	Help: "Total scheduling events observed in BPF run-queue histogram",
+})
 
 // runqHistKey matches the memory layout of C struct runq_hist_key in noisy-neighbour.bpf.c.
 type runqHistKey struct {
 	CgroupID     uint64
 	PrevCgroupID uint64
 	Bucket       uint32
+	_            [4]byte
+}
+
+// runqCollector implements prometheus.Collector for the run-queue latency histogram.
+// It reads BPF bucket counts directly and emits MustNewConstHistogram, avoiding
+// the O(count) overhead of calling Observe() for every accumulated event.
+type runqCollector struct {
+	desc   *prometheus.Desc
+	objs   *bpfObjects
+	mapper *cgroupMapper
+}
+
+func newRunqCollector(objs *bpfObjects, mapper *cgroupMapper) *runqCollector {
+	return &runqCollector{
+		desc: prometheus.NewDesc(
+			"ebpf_runq_latency_nanoseconds",
+			"Run queue latency in nanoseconds, labeled by the scheduled cgroup and the cgroup it preempted",
+			[]string{"cgroup", "prev_cgroup"},
+			nil,
+		),
+		objs:   objs,
+		mapper: mapper,
+	}
+}
+
+func (c *runqCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.desc
+}
+
+func (c *runqCollector) Collect(ch chan<- prometheus.Metric) {
+	type pair struct{ cgroup, prev string }
+	type bucketArr [numBuckets]uint64
+	grouped := make(map[pair]*bucketArr)
+
+	var key runqHistKey
+	var val uint64
+	iter := c.objs.RunqHistograms.Iterate()
+	for iter.Next(&key, &val) {
+		if val == 0 || key.Bucket >= numBuckets {
+			continue
+		}
+		cgroup := c.mapper.name(key.CgroupID)
+		if !strings.HasPrefix(cgroup, "pod/") {
+			continue
+		}
+		p := pair{cgroup, c.mapper.name(key.PrevCgroupID)}
+		if grouped[p] == nil {
+			arr := bucketArr{}
+			grouped[p] = &arr
+		}
+		grouped[p][key.Bucket] += val
+	}
+	if err := iter.Err(); err != nil {
+		log.Printf("Error iterating BPF histogram map: %v", err)
+	}
+
+	for p, counts := range grouped {
+		// BPF bucket b covers [bucketBoundsNs[b], bucketBoundsNs[b+1]).
+		// Events in bucket b have latency ≥ bucketBoundsNs[b], so they belong
+		// in Prometheus le=bucketBoundsNs[b+1] (one level up), not le=bucketBoundsNs[b].
+		//
+		// Cumulative Prometheus count for le=bucketBoundsNs[b] is therefore the
+		// sum of BPF bucket counts for k ∈ [0, b-1].
+		cumulBuckets := make(map[float64]uint64, numBuckets)
+
+		// le[0]: no BPF bucket has events with latency ≤ bucketBoundsNs[0].
+		cumulBuckets[bucketBoundsNs[0]] = 0
+
+		var cumul uint64
+		for b := 1; b < numBuckets; b++ {
+			cumul += counts[b-1]
+			cumulBuckets[bucketBoundsNs[b]] = cumul
+		}
+		// Absorb BPF overflow bucket (23) into the last Prometheus bucket,
+		// clamping those events to ≤ bucketBoundsNs[23] (~8.4 s).
+		cumulBuckets[bucketBoundsNs[numBuckets-1]] += counts[numBuckets-1]
+		totalCount := cumul + counts[numBuckets-1]
+
+		// Approximate sum using bucket midpoints; overflow bucket uses lower bound.
+		var sum float64
+		for b := 0; b < numBuckets-1; b++ {
+			mid := (bucketBoundsNs[b] + bucketBoundsNs[b+1]) / 2
+			sum += float64(counts[b]) * mid
+		}
+		sum += float64(counts[numBuckets-1]) * bucketBoundsNs[numBuckets-1]
+
+		ch <- prometheus.MustNewConstHistogram(c.desc, totalCount, sum, cumulBuckets, p.cgroup, p.prev)
+	}
 }
 
 // cgroupMapper resolves kernel cgroup IDs to human-readable labels.
@@ -102,7 +196,8 @@ func (m *cgroupMapper) name(id uint64) string {
 // cgroupLabel derives a concise Prometheus-friendly label from a cgroup path.
 //
 // GKE cgroupv2 layout (containerd):
-//   kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod<uid>.slice/cri-containerd-<cid>.scope
+//
+//	kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod<uid>.slice/cri-containerd-<cid>.scope
 //
 // We extract pod-uid prefix and container-id prefix to keep cardinality low.
 func cgroupLabel(path string) string {
@@ -184,68 +279,36 @@ func main() {
 
 	mapper := newCgroupMapper()
 
+	prometheus.MustRegister(newRunqCollector(&objs, mapper))
+
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		log.Println("Metrics available at :9090/metrics")
 		log.Fatal(http.ListenAndServe(":9090", nil))
 	}()
 
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-
-	log.Println("Polling run-queue latency histograms from eBPF map...")
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	// Track cumulative counts exported per key (cgroup, prev_cgroup, bucket_latency_upper_bound)
-	prevCounts := make(map[runqHistKey]uint64)
-
-	// Bucket bounds matching ExponentialBuckets(1000, 2, 24) in nanoseconds
-	bucketBounds := make([]float64, 24)
-	bound := 1000.0 // 1 µs
-	for i := 0; i < 24; i++ {
-		bucketBounds[i] = bound
-		bound *= 2.0
-	}
-
-	for {
-		select {
-		case <-stopper:
-			log.Println("Shutting down")
-			return
-		case <-ticker.C:
-			var (
-				key       runqHistKey
-				val       uint64
-				iter      = objs.RunqHistograms.Iterate()
-				newEvents uint64
-			)
-			for iter.Next(&key, &val) {
-				diff := val - prevCounts[key]
-				if diff > 0 {
-					prevCounts[key] = val
-					newEvents += diff
-					cgroup := mapper.name(key.CgroupID)
-					if strings.HasPrefix(cgroup, "pod/") {
-						prevCgroup := mapper.name(key.PrevCgroupID)
-						latNs := bucketBounds[key.Bucket]
-						if key.Bucket >= uint32(len(bucketBounds)) {
-							latNs = bucketBounds[len(bucketBounds)-1]
-						}
-						// Add difference to histogram metric observer
-						for i := uint64(0); i < diff; i++ {
-							runqLatency.WithLabelValues(cgroup, prevCgroup).Observe(latNs)
-						}
-					}
-				}
+	// Poll BPF map periodically to keep eventsTotal up to date.
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		var prevTotal uint64
+		for range ticker.C {
+			var k runqHistKey
+			var v, total uint64
+			iter := objs.RunqHistograms.Iterate()
+			for iter.Next(&k, &v) {
+				total += v
 			}
-			if err := iter.Err(); err != nil {
-				log.Printf("Error iterating BPF histogram map: %v", err)
-			}
-			if newEvents > 0 {
-				eventsTotal.Add(float64(newEvents))
+			if total > prevTotal {
+				eventsTotal.Add(float64(total - prevTotal))
+				prevTotal = total
 			}
 		}
-	}
+	}()
+
+	stopper := make(chan os.Signal, 1)
+	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
+	log.Println("Collecting run-queue latency from eBPF map...")
+	<-stopper
+	log.Println("Shutting down")
 }
