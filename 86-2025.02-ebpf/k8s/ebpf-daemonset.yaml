@@ -22,6 +22,9 @@ spec:
         app: ebpf-ds
     spec:
       hostPID: true  # Required to access host syscalls
+      tolerations:
+      - operator: "Exists"  # Runs on all nodes including tainted ones
+
       containers:
       - name: ebpf-ds
         image: ${IMAGE}

@@ -87,6 +87,16 @@ tasks:
     cmds:
       - ./list-cgroup-labels.sh
 
+  deploy-victim:
+    desc: Deploy victim-api test workload to noisy-node pool
+    cmds:
+      - kubectl apply -f k8s/victim-api.yaml
+
+  deploy-bully:
+    desc: Deploy bully-hog CPU stressor to noisy-node pool
+    cmds:
+      - kubectl apply -f k8s/bully-hog.yaml
+
   help:
     desc: Show list of available tasks and their descriptions
     cmds:
