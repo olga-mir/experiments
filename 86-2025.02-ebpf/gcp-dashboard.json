@@ -1,13 +1,6 @@
 {
-  "displayName": "GKE eBPF",
+  "displayName": "GKE eBPF Noisy Neighbor",
   "dashboardFilters": [
-    {
-      "filterType": "METRIC_LABEL",
-      "labelKey": "pod",
-      "stringValue": "",
-      "templateVariable": "ebpf_node",
-      "valueType": "STRING"
-    },
     {
       "filterType": "METRIC_LABEL",
       "labelKey": "cgroup",
@@ -16,7 +9,7 @@
       "valueType": "STRING"
     }
   ],
-  "description": "",
+  "description": "eBPF Noisy Neighbor Run-Queue Latency Dashboard based on Netflix Tech Blog",
   "labels": {},
   "mosaicLayout": {
     "columns": 48,
@@ -39,7 +32,7 @@
           "title": "Description",
           "id": "",
           "text": {
-            "content": "This dashboard is an implementation of https://netflixtechblog.com/noisy-neighbor-detection-with-ebpf-64b1f4b3bbdd\n\n**Required filters (top of page):**\n- **ebpf_node** — select one eBPF DaemonSet pod (= one node). Cardinality is per-node; mixing nodes makes the graphs unreadable.\n- **cgroup_pod** — (Noisy Neighbour section only) select the victim pod to investigate.",
+            "content": "This dashboard is an implementation of https://netflixtechblog.com/noisy-neighbor-detection-with-ebpf-64b1f4b3bbdd\n\n**Usage:**\n- **eBPF Events Ingested**: Shows scheduling delay events exceeding 1ms.\n- **p99 Run-Queue Latency**: 99th percentile CPU queue delay.\n- **cgroup_pod Filter**: Select target victim pod to analyze preemption source (`prev_cgroup`).",
             "format": "MARKDOWN",
             "style": {
               "backgroundColor": "#FFFFFF",
@@ -89,7 +82,7 @@
         "height": 16,
         "width": 48,
         "widget": {
-          "title": "ebpf_runq_latency_nanoseconds_bucket",
+          "title": "Run-Queue Latency Metrics",
           "collapsibleGroup": {
             "collapsed": false
           },
@@ -101,7 +94,7 @@
         "height": 16,
         "width": 24,
         "widget": {
-          "title": "p99 (logarithmic scale)",
+          "title": "Overall p99 Run-Queue Latency by Victim Pod (ms)",
           "xyChart": {
             "chartOptions": {
               "displayHorizontal": false,
@@ -112,14 +105,14 @@
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "prometheusQuery": "histogram_quantile(0.99, sum by (cgroup, prev_cgroup, le, ${__groupby}) (rate(ebpf_runq_latency_nanoseconds_bucket{pod=~\"${ebpf_node.value}\", cgroup=~\"pod/.*\"}[5m]))) / 1e6"
+                  "prometheusQuery": "histogram_quantile(0.99, sum(rate(ebpf_runq_latency_nanoseconds_bucket[2m])) by (le, cgroup)) / 1000000"
                 }
               }
             ],
             "thresholds": [],
             "yAxis": {
               "label": "latency (ms)",
-              "scale": "LOG10"
+              "scale": "LINEAR"
             }
           }
         }
@@ -130,7 +123,7 @@
         "height": 16,
         "width": 24,
         "widget": {
-          "title": "p50",
+          "title": "p50 Run-Queue Latency by Victim Pod (ms)",
           "id": "",
           "xyChart": {
             "chartOptions": {
@@ -143,7 +136,7 @@
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "prometheusQuery": "histogram_quantile(0.50, sum by (cgroup, prev_cgroup, le, ${__groupby}) (rate(ebpf_runq_latency_nanoseconds_bucket{pod=~\"${ebpf_node.value}\", cgroup=~\"pod/.*\"}[5m]))) / 1e6",
+                  "prometheusQuery": "histogram_quantile(0.50, sum(rate(ebpf_runq_latency_nanoseconds_bucket[2m])) by (le, cgroup)) / 1000000",
                   "unitOverride": ""
                 }
               }
@@ -159,72 +152,9 @@
       {
         "yPos": 32,
         "height": 16,
-        "width": 24,
-        "widget": {
-          "title": "p99 latency in milliseconds, grouped by cgroup pair",
-          "id": "",
-          "xyChart": {
-            "chartOptions": {
-              "displayHorizontal": false,
-              "mode": "COLOR",
-              "showLegend": false
-            },
-            "dataSets": [
-              {
-                "plotType": "LINE",
-                "targetAxis": "Y1",
-                "timeSeriesQuery": {
-                  "prometheusQuery": "histogram_quantile(\n  0.99,\n  sum by (cgroup, prev_cgroup, le, ${__groupby}) (\n    rate(ebpf_runq_latency_nanoseconds_bucket{pod=~\"${ebpf_node.value}\", cgroup=~\"pod/.*\"}[5m])\n  )\n) / 1e6",
-                  "unitOverride": ""
-                }
-              }
-            ],
-            "thresholds": [],
-            "yAxis": {
-              "label": "latency (ms)",
-              "scale": "LINEAR"
-            }
-          }
-        }
-      },
-      {
-        "yPos": 32,
-        "xPos": 24,
-        "height": 16,
-        "width": 24,
-        "widget": {
-          "title": "overall node-level p99",
-          "id": "",
-          "xyChart": {
-            "chartOptions": {
-              "displayHorizontal": false,
-              "mode": "COLOR",
-              "showLegend": false
-            },
-            "dataSets": [
-              {
-                "plotType": "LINE",
-                "targetAxis": "Y1",
-                "timeSeriesQuery": {
-                  "prometheusQuery": "histogram_quantile(\n  0.99,\n  sum by (le, ${__groupby}) (\n    rate(ebpf_runq_latency_nanoseconds_bucket{pod=~\"${ebpf_node.value}\", cgroup=~\"pod/.*\"}[5m])\n  )\n) / 1e6",
-                  "unitOverride": ""
-                }
-              }
-            ],
-            "thresholds": [],
-            "yAxis": {
-              "label": "latency (ms)",
-              "scale": "LINEAR"
-            }
-          }
-        }
-      },
-      {
-        "yPos": 48,
-        "height": 16,
         "width": 48,
         "widget": {
-          "title": "Noisy Neighbour Analysis",
+          "title": "Noisy Neighbor Analysis",
           "collapsibleGroup": {
             "collapsed": false
           },
@@ -232,11 +162,11 @@
         }
       },
       {
-        "yPos": 48,
+        "yPos": 32,
         "height": 16,
         "width": 48,
         "widget": {
-          "title": "Noisy neighbours for selected pod — p99 latency by prev_cgroup (ms)",
+          "title": "Identify Noisy Neighbor (prev_cgroup Attributed Latency Rate)",
           "xyChart": {
             "chartOptions": {
               "displayHorizontal": false,
@@ -247,15 +177,15 @@
                 "plotType": "LINE",
                 "targetAxis": "Y1",
                 "timeSeriesQuery": {
-                  "prometheusQuery": "histogram_quantile(\n  0.99,\n  sum by (prev_cgroup, le) (\n    rate(ebpf_runq_latency_nanoseconds_bucket{pod=~\"${ebpf_node.value}\", cgroup=~\"${cgroup_pod.value}\"}[5m])\n  )\n) / 1e6",
-                  "unitOverride": "ms"
+                  "prometheusQuery": "sum(rate(ebpf_runq_latency_nanoseconds_bucket{cgroup=~\"pod/.*\"}[2m])) by (cgroup, prev_cgroup)",
+                  "unitOverride": ""
                 }
               }
             ],
             "thresholds": [],
             "yAxis": {
-              "label": "latency (ms)",
-              "scale": "LOG10"
+              "label": "event rate",
+              "scale": "LINEAR"
             }
           }
         }

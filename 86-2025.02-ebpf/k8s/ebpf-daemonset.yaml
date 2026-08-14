@@ -22,8 +22,13 @@ spec:
         app: ebpf-ds
     spec:
       hostPID: true  # Required to access host syscalls
+      nodeSelector:
+        workload: noisy-node
       tolerations:
-      - operator: "Exists"  # Runs on all nodes including tainted ones
+      - key: "dedicated"
+        operator: "Equal"
+        value: "noisy-node"
+        effect: "NoSchedule"
 
       containers:
       - name: ebpf-ds
