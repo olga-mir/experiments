@@ -1,0 +1,33 @@
+# Scoped RBAC for the AgentCore execution role. The IAM role itself is
+# mapped to the "agentcore-sre-agent" Kubernetes group via an EKS access
+# entry (see Taskfile `grant-access` task) - this ClusterRole/Binding is what
+# that group is actually allowed to do. Deliberately narrower than the
+# built-in AmazonEKSAdminPolicy/AmazonEKSViewPolicy: read access plus just
+# enough write access to restart a deployment or delete a stuck pod.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentcore-sre-agent
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentcore-sre-agent
+subjects:
+  - kind: Group
+    name: agentcore-sre-agent
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: agentcore-sre-agent
+  apiGroup: rbac.authorization.k8s.io

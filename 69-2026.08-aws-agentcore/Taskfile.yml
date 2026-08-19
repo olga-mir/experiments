@@ -1,0 +1,78 @@
+version: '3'
+
+vars:
+  CLUSTER_NAME:
+    sh: echo "${CLUSTER_NAME:?'CLUSTER_NAME environment variable is required'}"
+  AWS_REGION:
+    sh: echo "${AWS_REGION:-$(aws configure get region)}"
+
+env:
+  CLUSTER_NAME: "{{.CLUSTER_NAME}}"
+  AWS_REGION: "{{.AWS_REGION}}"
+
+tasks:
+  preflight:
+    desc: Validate required environment variables
+    cmds:
+      - echo "CLUSTER_NAME={{.CLUSTER_NAME}}"
+      - |
+        if [ -z "{{.AWS_REGION}}" ]; then
+          echo "WARNING: AWS_REGION not set and no default region configured (aws configure get region)"
+        else
+          echo "AWS_REGION={{.AWS_REGION}}"
+        fi
+
+  cluster-up:
+    desc: Create the Fargate-only EKS cluster (takes ~15 min)
+    deps: [preflight]
+    cmds:
+      - envsubst < cluster.yaml | eksctl create cluster -f -
+      - aws eks update-kubeconfig --name {{.CLUSTER_NAME}} --region {{.AWS_REGION}}
+
+  cluster-down:
+    desc: Delete the EKS cluster (stops the ~$0.10/hr control-plane charge)
+    deps: [preflight]
+    cmds:
+      - eksctl delete cluster --name {{.CLUSTER_NAME}} --region {{.AWS_REGION}}
+
+  seed-broken-app:
+    desc: Deploy the deliberately crash-looping demo workload
+    deps: [preflight]
+    cmds:
+      - kubectl apply -f broken-app/crashloop-app.yaml
+      - 'echo "Wait ~30s then check: kubectl get pods -n demo"'
+
+  grant-access:
+    desc: "Map the AgentCore execution role to scoped RBAC (usage: task grant-access AGENT_ROLE_ARN=arn:aws:iam::...:role/...)"
+    deps: [preflight]
+    preconditions:
+      - sh: '[ -n "{{.AGENT_ROLE_ARN}}" ]'
+        msg: "AGENT_ROLE_ARN is required, e.g. task grant-access AGENT_ROLE_ARN=$(jq -r .role_arn agent/runtime_config.json)"
+    cmds:
+      - >
+        aws eks create-access-entry
+        --cluster-name {{.CLUSTER_NAME}}
+        --region {{.AWS_REGION}}
+        --principal-arn {{.AGENT_ROLE_ARN}}
+        --kubernetes-groups agentcore-sre-agent
+        || echo "access entry may already exist, continuing"
+      - kubectl apply -f rbac/agent-rbac.yaml
+
+  deploy-agent:
+    desc: Deploy the LangGraph agent to AgentCore Runtime (direct code deploy)
+    deps: [preflight]
+    dir: agent
+    cmds:
+      - uv run --with-requirements requirements.txt python deploy.py
+
+  invoke:
+    desc: "Invoke the deployed agent (usage: task invoke -- \"your prompt\")"
+    dir: agent
+    cmds:
+      - uv run --with-requirements requirements.txt python invoke.py {{.CLI_ARGS}}
+
+  cleanup-agent:
+    desc: Delete the AgentCore runtime, IAM role, and S3 artifact (leaves the cluster alone)
+    dir: agent
+    cmds:
+      - uv run --with-requirements requirements.txt python cleanup.py
