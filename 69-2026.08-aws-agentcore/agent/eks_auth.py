@@ -48,7 +48,7 @@ def _get_bearer_token(cluster_name: str, region: str) -> str:
         params,
         region_name=region,
         expires_in=STS_TOKEN_EXPIRES_IN,
-        operation_name="",
+        operation_name="GetCallerIdentity",
     )
 
     encoded = base64.urlsafe_b64encode(signed_url.encode("utf-8")).decode("utf-8")
@@ -68,8 +68,15 @@ def get_api_client(cluster_name: str, region: str) -> k8s_client.ApiClient:
     configuration.host = cluster["endpoint"]
     configuration.verify_ssl = True
     configuration.ssl_ca_cert = _write_ca_cert(cluster["certificateAuthority"]["data"])
-    configuration.api_key = {"authorization": _get_bearer_token(cluster_name, region)}
-    configuration.api_key_prefix = {"authorization": "Bearer"}
+    token = _get_bearer_token(cluster_name, region)
+    configuration.api_key = {
+        "authorization": token,
+        "BearerToken": token,
+    }
+    configuration.api_key_prefix = {
+        "authorization": "Bearer",
+        "BearerToken": "Bearer",
+    }
 
     return k8s_client.ApiClient(configuration)
 

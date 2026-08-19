@@ -79,7 +79,7 @@ def list_events(namespace: str = "default") -> str:
     if not events.items:
         return f"No events found in namespace '{namespace}'."
     lines = []
-    for ev in sorted(events.items, key=lambda e: e.last_timestamp or datetime.datetime.min.replace(tzinfo=None), reverse=True):
+    for ev in sorted(events.items, key=lambda e: e.last_timestamp or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc), reverse=True):
         lines.append(
             f"[{ev.type}] {ev.involved_object.kind}/{ev.involved_object.name} "
             f"reason={ev.reason} count={ev.count} message={ev.message}"
@@ -145,7 +145,7 @@ def create_agent():
     from langchain_aws import ChatBedrock
 
     llm = ChatBedrock(
-        model_id="global.anthropic.claude-sonnet-5",
+        model_id="amazon.nova-lite-v1:0",
         model_kwargs={"temperature": 0.1},
     )
     llm_with_tools = llm.bind_tools(TOOLS)

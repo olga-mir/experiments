@@ -34,7 +34,7 @@ from boto3.session import Session
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-AGENT_NAME = f"sre_agent_{int(time.time()) % 100000}"
+AGENT_NAME = "sre_agent"
 PROTOCOL = "HTTP"
 PYTHON_RUNTIME = "PYTHON_3_13"
 ENTRY_POINT = "agent.py"
@@ -241,29 +241,62 @@ def build_and_upload_package():
 def create_runtime(role_arn: str) -> dict:
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
-    print(f"\n  Creating AgentCore Runtime '{AGENT_NAME}'...")
-    response = control.create_agent_runtime(
-        agentRuntimeName=AGENT_NAME,
-        agentRuntimeArtifact={
-            "codeConfiguration": {
-                "code": {"s3": {"bucket": S3_BUCKET, "prefix": S3_PREFIX}},
-                "runtime": PYTHON_RUNTIME,
-                "entryPoint": [ENTRY_POINT],
-            }
-        },
-        roleArn=role_arn,
-        networkConfiguration={"networkMode": "PUBLIC"},
-        protocolConfiguration={"serverProtocol": PROTOCOL},
-        environmentVariables={
-            "CLUSTER_NAME": CLUSTER_NAME,
-            "AWS_REGION": REGION,
-        },
-        description="LangGraph SRE agent troubleshooting a real EKS cluster",
-    )
+    existing_runtime_id = None
+    try:
+        runtimes = control.list_agent_runtimes().get("agentRuntimes", [])
+        for rt in runtimes:
+            if rt["agentRuntimeName"] == AGENT_NAME:
+                existing_runtime_id = rt["agentRuntimeId"]
+                break
+    except Exception as e:
+        print(f"Error checking existing runtimes: {e}")
 
-    runtime_id = response["agentRuntimeId"]
-    runtime_arn = response["agentRuntimeArn"]
-    print(f"  ✓ Runtime created: {runtime_id}")
+    if existing_runtime_id:
+        print(f"\n  Updating existing AgentCore Runtime '{AGENT_NAME}' ({existing_runtime_id})...")
+        response = control.update_agent_runtime(
+            agentRuntimeId=existing_runtime_id,
+            agentRuntimeArtifact={
+                "codeConfiguration": {
+                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": S3_PREFIX}},
+                    "runtime": PYTHON_RUNTIME,
+                    "entryPoint": [ENTRY_POINT],
+                }
+            },
+            roleArn=role_arn,
+            networkConfiguration={"networkMode": "PUBLIC"},
+            protocolConfiguration={"serverProtocol": PROTOCOL},
+            environmentVariables={
+                "CLUSTER_NAME": CLUSTER_NAME,
+                "AWS_REGION": REGION,
+            },
+            description="LangGraph SRE agent troubleshooting a real EKS cluster",
+        )
+        runtime_id = existing_runtime_id
+        runtime_arn = response.get("agentRuntimeArn") or f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/{runtime_id}"
+    else:
+        print(f"\n  Creating new AgentCore Runtime '{AGENT_NAME}'...")
+        response = control.create_agent_runtime(
+            agentRuntimeName=AGENT_NAME,
+            agentRuntimeArtifact={
+                "codeConfiguration": {
+                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": S3_PREFIX}},
+                    "runtime": PYTHON_RUNTIME,
+                    "entryPoint": [ENTRY_POINT],
+                }
+            },
+            roleArn=role_arn,
+            networkConfiguration={"networkMode": "PUBLIC"},
+            protocolConfiguration={"serverProtocol": PROTOCOL},
+            environmentVariables={
+                "CLUSTER_NAME": CLUSTER_NAME,
+                "AWS_REGION": REGION,
+            },
+            description="LangGraph SRE agent troubleshooting a real EKS cluster",
+        )
+        runtime_id = response["agentRuntimeId"]
+        runtime_arn = response["agentRuntimeArn"]
+
+    print(f"  ✓ Runtime registered: {runtime_id}")
 
     print("  Waiting for runtime to be ready...")
     while True:
@@ -285,6 +318,31 @@ def create_runtime(role_arn: str) -> dict:
 
 def create_endpoint(runtime_id: str) -> dict:
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+    try:
+        eps = control.list_agent_runtime_endpoints(agentRuntimeId=runtime_id)
+        for ep in eps.get("runtimeEndpoints", []):
+            if ep["name"] == "default":
+                print("  ✓ Endpoint 'default' already exists")
+                status = ep["status"]
+                print(f"    Status: {status}")
+                if status == "READY":
+                    return ep
+                print("  Waiting for endpoint to be ready...")
+                while True:
+                    eps_status = control.list_agent_runtime_endpoints(agentRuntimeId=runtime_id)
+                    for ep_status in eps_status.get("runtimeEndpoints", []):
+                        if ep_status["name"] == "default":
+                            status = ep_status["status"]
+                            print(f"    Status: {status}")
+                            if status == "READY":
+                                return ep_status
+                            if status in ("CREATE_FAILED", "UPDATE_FAILED"):
+                                print("  ✗ Endpoint check failed")
+                                sys.exit(1)
+                    time.sleep(15)
+    except Exception as e:
+        print(f"  Warning checking endpoints: {e}")
 
     print("\n  Creating endpoint 'default'...")
     response = control.create_agent_runtime_endpoint(
