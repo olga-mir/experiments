@@ -1,6 +1,7 @@
 import datetime
 import os
 
+import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from kubernetes import client as k8s_client
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -12,6 +13,7 @@ import eks_auth
 
 CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 AWS_REGION = os.environ["AWS_REGION"]
+ARTIFACT_BUCKET = os.environ["ARTIFACT_BUCKET"]
 
 app = BedrockAgentCoreApp()
 
@@ -22,6 +24,10 @@ def _core_v1() -> k8s_client.CoreV1Api:
 
 def _apps_v1() -> k8s_client.AppsV1Api:
     return k8s_client.AppsV1Api(eks_auth.get_api_client(CLUSTER_NAME, AWS_REGION))
+
+
+def _s3():
+    return boto3.client("s3", region_name=AWS_REGION)
 
 
 # ── Read-only tools ───────────────────────────────────────────────────────
@@ -102,6 +108,25 @@ def list_deployments(namespace: str = "default") -> str:
     return "\n".join(lines)
 
 
+# ── S3 input/output tools ────────────────────────────────────────────────
+
+
+@tool
+def fetch_input_from_s3(key: str) -> str:
+    """Download a text object (e.g. an incident ticket) from the shared artifact
+    bucket under the given key, and return its contents."""
+    obj = _s3().get_object(Bucket=ARTIFACT_BUCKET, Key=key)
+    return obj["Body"].read().decode("utf-8")
+
+
+@tool
+def upload_report_to_s3(key: str, report: str) -> str:
+    """Upload the final troubleshooting report as text to the shared artifact
+    bucket under the given key (e.g. 'reports/2026-08-19-payments-worker.md')."""
+    _s3().put_object(Bucket=ARTIFACT_BUCKET, Key=key, Body=report.encode("utf-8"))
+    return f"Uploaded report to s3://{ARTIFACT_BUCKET}/{key}"
+
+
 # ── Limited-write tools ──────────────────────────────────────────────────
 
 
@@ -129,15 +154,22 @@ TOOLS = [
     list_deployments,
     restart_deployment,
     delete_pod,
+    fetch_input_from_s3,
+    upload_report_to_s3,
 ]
 
 SYSTEM_MESSAGE = (
     "You're an SRE assistant investigating issues on a real EKS cluster "
-    f"('{CLUSTER_NAME}') via Kubernetes API tools. Prefer read-only "
-    "investigation (list_pods, describe_pod, get_pod_logs, list_events, "
-    "list_deployments) to find the root cause before taking any write "
-    "action (restart_deployment, delete_pod). Quote the actual log/event "
-    "messages you found as evidence for your diagnosis."
+    f"('{CLUSTER_NAME}') via Kubernetes API tools. If the user's request "
+    "references an incident ticket or input file by S3 key, fetch it first "
+    "with fetch_input_from_s3 for context. Prefer read-only investigation "
+    "(list_pods, describe_pod, get_pod_logs, list_events, list_deployments) "
+    "to find the root cause before taking any write action "
+    "(restart_deployment, delete_pod). Quote the actual log/event messages "
+    "you found as evidence for your diagnosis. Once you've reached a "
+    "conclusion, write a troubleshooting report (symptoms, root cause, "
+    "evidence, actions taken) and upload it with upload_report_to_s3 under "
+    "a key like 'reports/<namespace>-<workload>-<UTC timestamp>.md'."
 )
 
 

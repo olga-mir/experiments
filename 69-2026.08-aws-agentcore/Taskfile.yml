@@ -42,6 +42,15 @@ tasks:
       - kubectl apply -f broken-app/crashloop-app.yaml
       - 'echo "Wait ~30s then check: kubectl get pods -n demo"'
 
+  seed-input:
+    desc: Upload a sample incident ticket to the agent's S3 artifact bucket
+    deps: [preflight]
+    cmds:
+      - >
+        printf '%s\n' "Incident: payments-worker pods in the demo namespace are crash-looping. Reported by on-call. Please investigate root cause."
+        | aws s3 cp - s3://$(jq -r .artifact_bucket agent/runtime_config.json)/input/ticket.txt --region {{.AWS_REGION}}
+      - 'echo "Try: task invoke -- \"Fetch input/ticket.txt from S3 and investigate the reported issue, then upload your report\""'
+
   grant-access:
     desc: "Map the AgentCore execution role to scoped RBAC (usage: task grant-access AGENT_ROLE_ARN=arn:aws:iam::...:role/...)"
     deps: [preflight]
@@ -72,7 +81,7 @@ tasks:
       - uv run --with-requirements requirements.txt python invoke.py {{.CLI_ARGS}}
 
   cleanup-agent:
-    desc: Delete the AgentCore runtime, IAM role, and S3 artifact (leaves the cluster alone)
+    desc: Delete the AgentCore runtime, IAM role, and S3 artifacts (leaves the cluster alone)
     dir: agent
     cmds:
       - uv run --with-requirements requirements.txt python cleanup.py

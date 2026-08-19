@@ -8,7 +8,7 @@ Adapted from the awslabs agentcore-samples reference:
 Steps:
 1. Create an IAM execution role with AgentCore permissions + eks:DescribeCluster
 2. Install arm64 dependencies with uv, zip with agent code, upload to S3
-3. Create an AgentCore Runtime with codeConfiguration + CLUSTER_NAME/AWS_REGION env vars
+3. Create an AgentCore Runtime with codeConfiguration + CLUSTER_NAME/AWS_REGION/ARTIFACT_BUCKET env vars
 4. Wait for READY, create endpoint, save config
 
 Prerequisites:
@@ -50,6 +50,7 @@ REGION = session.region_name
 ACCOUNT_ID = session.client("sts").get_caller_identity()["Account"]
 S3_BUCKET = f"agentcore-code-{ACCOUNT_ID}-{REGION}"
 S3_PREFIX = f"{AGENT_NAME}/code.zip"
+ARTIFACT_BUCKET = f"agentcore-artifacts-{ACCOUNT_ID}-{REGION}"
 CLUSTER_ARN = f"arn:aws:eks:{REGION}:{ACCOUNT_ID}:cluster/{CLUSTER_NAME}"
 
 print(f"Region:     {REGION}")
@@ -136,6 +137,12 @@ def create_execution_role() -> str:
                 "Effect": "Allow",
                 "Action": "eks:DescribeCluster",
                 "Resource": CLUSTER_ARN,
+            },
+            {
+                "Sid": "ArtifactBucketReadWrite",
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:PutObject"],
+                "Resource": f"arn:aws:s3:::{ARTIFACT_BUCKET}/*",
             },
         ],
     }
@@ -235,6 +242,22 @@ def build_and_upload_package():
     os.remove(zip_file)
 
 
+def create_artifact_bucket():
+    """Create the S3 bucket the agent uses at runtime for input/report artifacts."""
+    s3 = boto3.client("s3", region_name=REGION)
+    try:
+        if REGION == "us-east-1":
+            s3.create_bucket(Bucket=ARTIFACT_BUCKET)
+        else:
+            s3.create_bucket(
+                Bucket=ARTIFACT_BUCKET,
+                CreateBucketConfiguration={"LocationConstraint": REGION},
+            )
+        print(f"\n✓ Created S3 artifact bucket: {ARTIFACT_BUCKET}")
+    except (s3.exceptions.BucketAlreadyOwnedByYou, s3.exceptions.BucketAlreadyExists):
+        print(f"\n✓ S3 artifact bucket exists: {ARTIFACT_BUCKET}")
+
+
 # ── Step 3: Create AgentCore Runtime ─────────────────────────────────────────
 
 
@@ -268,6 +291,7 @@ def create_runtime(role_arn: str) -> dict:
             environmentVariables={
                 "CLUSTER_NAME": CLUSTER_NAME,
                 "AWS_REGION": REGION,
+                "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
             },
             description="LangGraph SRE agent troubleshooting a real EKS cluster",
         )
@@ -290,6 +314,7 @@ def create_runtime(role_arn: str) -> dict:
             environmentVariables={
                 "CLUSTER_NAME": CLUSTER_NAME,
                 "AWS_REGION": REGION,
+                "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
             },
             description="LangGraph SRE agent troubleshooting a real EKS cluster",
         )
@@ -377,6 +402,7 @@ def main():
     print("=" * 60)
 
     role_arn = create_execution_role()
+    create_artifact_bucket()
     build_and_upload_package()
     runtime = create_runtime(role_arn)
     create_endpoint(runtime["runtime_id"])
@@ -388,6 +414,7 @@ def main():
         "region": REGION,
         "role_arn": role_arn,
         "cluster_name": CLUSTER_NAME,
+        "artifact_bucket": ARTIFACT_BUCKET,
     }
     with open("runtime_config.json", "w") as f:
         json.dump(config, f, indent=2)

@@ -18,8 +18,11 @@ Base pattern adapted from the AgentCore samples repo:
 ```
 you ──invoke_agent_runtime()──▶ AgentCore Runtime (PUBLIC network mode)
                                    └─ LangGraph agent (Bedrock Claude)
-                                        └─ kubernetes-client tools ──▶ EKS API (public endpoint)
-                                                                          cluster (Fargate, no EC2 nodes)
+                                        ├─ kubernetes-client tools ──▶ EKS API (public endpoint)
+                                        │                                 cluster (Fargate, no EC2 nodes)
+                                        └─ S3 tools ──▶ agentcore-artifacts-<account>-<region>
+                                                           input/*    (fetch_input_from_s3)
+                                                           reports/*  (upload_report_to_s3)
 ```
 
 - **Auth to Bedrock**: the runtime's IAM execution role (`bedrock:InvokeModel`).
@@ -32,6 +35,12 @@ you ──invoke_agent_runtime()──▶ AgentCore Runtime (PUBLIC network mode
 - **Network path**: the EKS cluster's public API endpoint is left open (default `0.0.0.0/0`) since
   AgentCore Runtime in `PUBLIC` network mode reaches it over the internet, not via VPC peering. Acceptable
   for a cluster you spin up and tear down for testing; not production practice.
+- **Extra spans / S3 I/O**: there's no dedicated "artifact service" in AgentCore Runtime — `fetch_input_from_s3`
+  and `upload_report_to_s3` in `agent/agent.py` are plain `boto3` calls wrapped as LangChain tools, same
+  pattern as the Kubernetes tools. Because they run through `ToolNode`, they show up as their own spans in
+  the runtime's built-in OTEL/X-Ray trace, same as every other tool call — no manual instrumentation needed.
+  The execution role is scoped to `s3:GetObject`/`s3:PutObject` on a single bucket
+  (`agentcore-artifacts-<account>-<region>`), created by `deploy.py`.
 
 ## Layout
 
@@ -54,6 +63,9 @@ task deploy-agent          # deploys the LangGraph agent to AgentCore Runtime
 task grant-access AGENT_ROLE_ARN=<the arn above>
 
 task invoke -- "Investigate the demo namespace, something looks broken"
+
+task seed-input            # uploads a sample incident ticket to S3
+task invoke -- "Fetch input/ticket.txt from S3 and investigate the reported issue, then upload your report"
 ```
 
 ## Teardown

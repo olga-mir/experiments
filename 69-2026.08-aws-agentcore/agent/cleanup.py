@@ -62,6 +62,21 @@ def main():
     except Exception as e:
         print(f"  Warning: {e}")
 
+    artifact_bucket = config.get("artifact_bucket", f"agentcore-artifacts-{account_id}-{region}")
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        objects = [
+            {"Key": obj["Key"]}
+            for page in paginator.paginate(Bucket=artifact_bucket)
+            for obj in page.get("Contents", [])
+        ]
+        if objects:
+            s3.delete_objects(Bucket=artifact_bucket, Delete={"Objects": objects})
+        s3.delete_bucket(Bucket=artifact_bucket)
+        print(f"  Deleted S3 artifact bucket: {artifact_bucket}")
+    except Exception as e:
+        print(f"  Warning: {e}")
+
     role_name = f"agentcore-{agent_name}-role"
     try:
         policies = iam.list_role_policies(RoleName=role_name)
