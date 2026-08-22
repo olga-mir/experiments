@@ -1,0 +1,28 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ${CLUSTER_NAME}
+  region: ${AWS_REGION}
+  version: "1.31"
+
+# EKS access entries (modern IAM->RBAC mapping) instead of the legacy aws-auth
+# ConfigMap, so the AgentCore execution role can be granted a scoped
+# ClusterRole via `aws eks create-access-entry` (see rbac/agent-rbac.yaml).
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+
+# No EC2 node groups on purpose - Fargate only, so there's no idle compute to
+# pay for/manage between test runs.
+fargateProfiles:
+  - name: kube-system
+    selectors:
+      - namespace: kube-system
+  - name: demo
+    selectors:
+      - namespace: demo
+
+# Public endpoint left open (default) - AgentCore Runtime (networkMode:
+# PUBLIC) reaches the cluster over the internet, not via VPC peering. This is
+# a throwaway demo cluster torn down after testing (`task cluster-down`); not
+# representative of production practice.
