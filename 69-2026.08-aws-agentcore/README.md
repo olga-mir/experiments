@@ -74,3 +74,13 @@ task invoke -- "Fetch input/ticket.txt from S3 and investigate the reported issu
 task cleanup-agent   # deletes the AgentCore runtime, its IAM role, and the S3 code artifact
 task cluster-down    # deletes the EKS cluster — stops the ~$0.10/hr control-plane charge
 ```
+## Screenshots
+
+### AWS SRE Agent Panel
+<img src="screenshots/aws-sre-agent-panel.png" alt="AWS SRE Agent Panel" style="max-width: 650px;" />
+
+### AWS Harness with Coding Interpreter
+<img src="screenshots/aws-harness-with-coding-interpreter.png" alt="AWS Harness with Coding Interpreter" style="max-width: 650px;" />
+
+### AWS Coding Harness Trace Tree
+<img src="screenshots/aws-coding-harness-trace-tree.png" alt="AWS Coding Harness Trace Tree" style="max-width: 650px;" />
