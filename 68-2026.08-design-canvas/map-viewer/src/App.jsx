@@ -1,69 +1,81 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   applyNodeChanges,
   applyEdgeChanges,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import graphData from '../../sample-data/graph-map-data.json';
+import defaultGraphData from '../../sample-data/graph-map-data.json';
+import ContractNode from './components/ContractNode.jsx';
+import TerminalNode from './components/TerminalNode.jsx';
+import { toFlowElements, validateGraphData } from './lib/graphData.js';
 
-// Custom node: shows label always, contract details on click (expand toggle)
-// instead of everything rendered at once - this is the fix for "too much on
-// one page" - each node's inputs/outputs/state/side-effects stay collapsed
-// until you want them.
-function ContractNode({ data }) {
-  const [expanded, setExpanded] = useState(false);
-  const c = data.contract;
+const nodeTypes = { contract: ContractNode, terminal: TerminalNode };
+
+function applyMarkerDefaults(edges) {
+  return edges.map((edge) => ({
+    ...edge,
+    markerEnd: edge.markerEnd ?? { type: MarkerType.ArrowClosed, color: '#64748b' },
+  }));
+}
+
+function GraphToolbar({ sourceLabel, error, onPickFile }) {
+  const inputRef = useRef(null);
+
   return (
-    <div
-      onClick={() => setExpanded((e) => !e)}
-      style={{
-        border: '1px solid #444',
-        borderRadius: 8,
-        padding: '8px 12px',
-        background: c.idempotent ? '#f0fdf4' : '#fef2f2',
-        minWidth: 160,
-        cursor: 'pointer',
-        fontFamily: 'ui-sans-serif, system-ui',
-      }}
-    >
-      <div style={{ fontWeight: 600 }}>{data.label}</div>
-      {expanded && c && (
-        <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.5, textAlign: 'left' }}>
-          <div><b>in:</b> {c.inputs}</div>
-          <div><b>out:</b> {c.outputs}</div>
-          {c.reads?.length > 0 && <div><b>reads:</b> {c.reads.join(', ')}</div>}
-          {c.writes?.length > 0 && <div><b>writes:</b> {c.writes.join(', ')}</div>}
-          {c.sideEffects?.length > 0 && <div><b>side fx:</b> {c.sideEffects.join(', ')}</div>}
-          <div><b>idempotent:</b> {String(c.idempotent)}</div>
-          <div><b>on failure:</b> {c.failureBehavior}</div>
-        </div>
-      )}
+    <div className="graph-toolbar">
+      <div className="graph-toolbar__title">Design canvas</div>
+      <label className="graph-toolbar__pick">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onPickFile(file);
+            event.target.value = '';
+          }}
+        />
+        Open graph-map-data.json
+      </label>
+      <div className="graph-toolbar__source" title={sourceLabel}>
+        {sourceLabel}
+      </div>
+      {error && <div className="graph-toolbar__error">{error}</div>}
     </div>
   );
 }
 
-const nodeTypes = { contract: ContractNode };
-
 export default function App() {
-  const [nodes, setNodes] = useState(
-    graphData.nodes.map((n) => ({
-      id: n.id,
-      position: n.position,
-      data: { label: n.label, contract: n.contract },
-      type: 'contract',
-    }))
-  );
-  const [edges, setEdges] = useState(
-    graphData.edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      animated: !!e.label,
-    }))
+  const [sourceLabel, setSourceLabel] = useState('sample-data/graph-map-data.json');
+  const [error, setError] = useState('');
+  const initial = toFlowElements(defaultGraphData);
+  const [nodes, setNodes] = useState(initial.nodes);
+  const [edges, setEdges] = useState(applyMarkerDefaults(initial.edges));
+
+  const loadGraphData = useCallback((raw, label) => {
+    const parsed = validateGraphData(raw);
+    const { nodes: nextNodes, edges: nextEdges } = toFlowElements(parsed);
+    setNodes(nextNodes);
+    setEdges(applyMarkerDefaults(nextEdges));
+    setSourceLabel(label);
+    setError('');
+  }, []);
+
+  const onPickFile = useCallback(
+    async (file) => {
+      try {
+        const text = await file.text();
+        const raw = JSON.parse(text);
+        loadGraphData(raw, file.name);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not load that file.');
+      }
+    },
+    [loadGraphData]
   );
 
   const onNodesChange = useCallback(
@@ -76,19 +88,23 @@ export default function App() {
   );
 
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-      >
-        <Background />
-        <Controls />
-        <MiniMap />
-      </ReactFlow>
+    <div className="app-shell">
+      <GraphToolbar sourceLabel={sourceLabel} error={error} onPickFile={onPickFile} />
+      <div className="graph-pane">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+        >
+          <Background />
+          <Controls />
+          <MiniMap />
+        </ReactFlow>
+      </div>
     </div>
   );
 }

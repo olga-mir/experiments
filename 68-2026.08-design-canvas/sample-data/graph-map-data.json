@@ -1,6 +1,12 @@
 {
   "nodes": [
     {
+      "id": "START",
+      "label": "START",
+      "kind": "start",
+      "position": { "x": -140, "y": 200 }
+    },
+    {
       "id": "maintenance_gate",
       "label": "maintenance_gate",
       "position": { "x": 0, "y": 200 },
@@ -104,14 +110,36 @@
         "idempotent": true,
         "failureBehavior": "Missing state renders with \"unknown host\"/empty-string fallbacks rather than raising"
       }
+    },
+    {
+      "id": "END_ERR",
+      "label": "end",
+      "kind": "end",
+      "position": { "x": 560, "y": 0 }
+    },
+    {
+      "id": "END_MAINT",
+      "label": "end",
+      "kind": "end",
+      "position": { "x": 560, "y": 400 }
+    },
+    {
+      "id": "END_OK",
+      "label": "end",
+      "kind": "end",
+      "position": { "x": 1060, "y": 200 }
     }
   ],
   "edges": [
+    { "id": "e0", "source": "START", "target": "maintenance_gate" },
     { "id": "e1", "source": "maintenance_gate", "target": "triage_agent", "label": "investigate" },
     { "id": "e2", "source": "maintenance_gate", "target": "maintenance_report", "label": "under_maintenance" },
     { "id": "e3", "source": "maintenance_gate", "target": "parse_error_report", "label": "parse_error" },
-    { "id": "e4", "source": "triage_agent", "target": "telemetry_metrics_analysis_agent", "label": "task delegation" },
+    { "id": "e4", "source": "triage_agent", "target": "telemetry_metrics_analysis_agent", "label": "task delegation", "dashed": true },
     { "id": "e5", "source": "triage_agent", "target": "categorizer_agent" },
-    { "id": "e6", "source": "categorizer_agent", "target": "report_assembler" }
+    { "id": "e6", "source": "categorizer_agent", "target": "report_assembler" },
+    { "id": "e7", "source": "parse_error_report", "target": "END_ERR" },
+    { "id": "e8", "source": "maintenance_report", "target": "END_MAINT" },
+    { "id": "e9", "source": "report_assembler", "target": "END_OK" }
   ]
 }
