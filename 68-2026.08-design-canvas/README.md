@@ -1,6 +1,6 @@
 # 68-2026.08-design-canvas
 
-**Status: not started.** This folder holds setup notes and sample data only — no code has been written yet. Shares the `68` / `2026.08` number+date with [`68-2026.08-moaar-agents-and-design-canvas`](../68-2026.08-moaar-agents-and-design-canvas/) per this repo's naming convention (see `../AGENTS.md`) since they're related but separate experiments; this one is a distinct slug, not a subfolder of that one.
+**Status: runnable.** `map-viewer/` is a scaffolded Vite+React app that renders `sample-data/graph-map-data.json` — `cd map-viewer && npm run dev`. Shares the `68` / `2026.08` number+date with [`68-2026.08-moaar-agents-and-design-canvas`](../68-2026.08-moaar-agents-and-design-canvas/) per this repo's naming convention (see `../AGENTS.md`) since they're related but separate experiments; this one is a distinct slug, not a subfolder of that one.
 
 ## What this is
 
@@ -10,18 +10,17 @@ It's meant to consume the output of the `/design-review` skill pipeline (already
 
 ## What's here
 
-- `map-viewer/App.jsx` — a working React Flow component (custom `ContractNode` with click-to-expand contract details). Not yet a runnable project — needs a Vite scaffold around it (see Next steps).
+- `map-viewer/` — a scaffolded Vite+React app (`npm create vite -- --template react` + `npm i reactflow`). `src/App.jsx` is the working React Flow component (custom `ContractNode` with click-to-expand contract details); `src/App.jsx` imports data from `../../sample-data/graph-map-data.json`. Verified with `npm run dev` and `vite build`.
 - `sample-data/` — real output for testing the viewer against, generated from the actual [`alert-triage-agent`](../68-2026.08-moaar-agents-and-design-canvas/alert-triage-agent/) implementation (its `app/agent.py` `Workflow` graph), not a toy example:
   - `graph-map-data.json` — the React Flow data file `App.jsx` expects (`nodes[].{id,label,position,contract{...}}`, `edges[].{id,source,target,label}`)
   - `graph-topology.mmd` — the same graph as a Mermaid flowchart
   - `node-contracts.md` — the same contracts as a markdown table
 
-## Next steps (for whoever picks this up)
+## Gaps / open questions (for whoever picks this up next)
 
-1. `cd map-viewer && npm create vite@latest . -- --template react` (scaffold in place, don't nest — or scaffold elsewhere and move `App.jsx` in), then `npm i reactflow`.
-2. Point `App.jsx`'s `import graphData from './graph-map-data.json'` at `../sample-data/graph-map-data.json` (or copy the file in) and `npm run dev` to confirm it renders `sample-data/`'s 7-node alert-triage-agent graph correctly.
-3. Decide the open product question this repo doesn't answer yet: is this a **static per-review viewer** (swap the JSON file, `npm run dev` again — what the original notes below describe) or does "design canvas" mean something with live/multiple-graph browsing, diffing between review runs, or editing? That decision isn't made — don't assume either way.
-4. If useful: `sample-data/`'s three files were hand-derived from the alert-triage-agent's source code by an agent, not produced by an actual `/design-review` run — worth running `/design-review` for real against a design doc once the viewer works, to confirm the pipeline's actual output shape matches `App.jsx`'s expectations exactly (field names, position values, etc.) rather than relying on this hand-authored approximation.
+- **The JSON path is hardcoded to sample data.** `src/App.jsx` imports `../../sample-data/graph-map-data.json` directly — there's no file picker or config, so viewing a different review's output means editing that import (or overwriting the sample file) and reloading.
+- **`sample-data/`'s files are hand-derived, not pipeline output.** They were hand-authored by an agent from the alert-triage-agent's source to match `App.jsx`'s expected shape — not produced by an actual `/design-review` run. Worth running the real pipeline against a design doc to confirm its actual `graph-map-data.json` shape (field names, position values, etc.) matches what `App.jsx` expects.
+- **Product question still undecided:** is this a **static per-review viewer** (swap the JSON file, reload — what it does today) or does "design canvas" mean something with live/multiple-graph browsing, diffing between review runs, or editing? Not decided — don't assume either way.
 
 ## Making this reusable across reviews (carried over from earlier notes)
 

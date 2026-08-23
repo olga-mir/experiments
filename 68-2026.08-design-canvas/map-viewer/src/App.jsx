@@ -7,7 +7,7 @@ import ReactFlow, {
   applyEdgeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import graphData from './graph-map-data.json';
+import graphData from '../../sample-data/graph-map-data.json';
 
 // Custom node: shows label always, contract details on click (expand toggle)
 // instead of everything rendered at once - this is the fix for "too much on
