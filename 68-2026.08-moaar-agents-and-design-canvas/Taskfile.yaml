@@ -1,0 +1,61 @@
+version: "3"
+
+vars:
+  AGENT_DIR: alert-triage-agent
+  REGION: us-central1
+
+tasks:
+  preflight:
+    desc: Check required tools, GCP auth, and environment variables
+    cmds:
+      - |
+        [ -n "${PROJECT_ID}" ] || (echo "ERROR: PROJECT_ID env var is required (GCP project the agent is deployed into)" && exit 1)
+      - |
+        for cmd in uv gcloud agents-cli; do
+          command -v $cmd >/dev/null 2>&1 || (echo "ERROR: $cmd not found" && exit 1)
+        done
+      - gcloud auth print-access-token --project="${PROJECT_ID}" >/dev/null
+      - |
+        [ -n "${GKE_PROJECT_ID}" ] || echo "WARN: GKE_PROJECT_ID not set — required at alert-triage-time, not needed for local dev/deploy"
+      - |
+        [ -n "${GKE_LOCATION}" ] || echo "WARN: GKE_LOCATION not set — required at alert-triage-time, not needed for local dev/deploy"
+      - |
+        [ -n "${GKE_CLUSTER_NAME}" ] || echo "WARN: GKE_CLUSTER_NAME not set — required at alert-triage-time, not needed for local dev/deploy"
+
+  install:
+    desc: Install agent dependencies
+    dir: "{{.AGENT_DIR}}"
+    cmds:
+      - agents-cli install
+
+  playground:
+    desc: Interactive local testing via the ADK dev UI
+    dir: "{{.AGENT_DIR}}"
+    deps: [install]
+    cmds:
+      - agents-cli playground
+
+  smoke-test:
+    desc: Run the agent once against a synthetic alert (no live GKE/Cloud Monitoring needed to exercise the maintenance gate)
+    dir: "{{.AGENT_DIR}}"
+    cmds:
+      - uv run python scripts/smoke_test.py
+
+  test:
+    desc: Run unit and integration tests
+    dir: "{{.AGENT_DIR}}"
+    cmds:
+      - uv run pytest tests/unit tests/integration
+
+  lint:
+    desc: Lint the agent code
+    dir: "{{.AGENT_DIR}}"
+    cmds:
+      - agents-cli lint
+
+  deploy:
+    desc: Deploy to Agent Platform (Agent Engine) dev — requires explicit confirmation before running
+    deps: [preflight]
+    dir: "{{.AGENT_DIR}}"
+    cmds:
+      - agents-cli deploy --project "${PROJECT_ID}" --region "{{.REGION}}"
