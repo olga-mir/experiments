@@ -11,8 +11,17 @@
       "label": "maintenance_gate",
       "position": { "x": 0, "y": 200 },
       "contract": {
-        "inputs": "types.Content (raw alert message, expected JSON matching Alert)",
-        "outputs": "Event(output=dict|None, route=investigate|under_maintenance|parse_error)",
+        "inputs": [
+          {
+            "name": "message",
+            "type": "types.Content",
+            "note": "raw alert message, expected JSON matching Alert"
+          }
+        ],
+        "outputs": [
+          { "name": "output", "type": "dict|None" },
+          { "name": "route", "type": "investigate|under_maintenance|parse_error" }
+        ],
         "reads": [],
         "writes": ["alert", "maintenance_check"],
         "sideEffects": [],
@@ -25,8 +34,11 @@
       "label": "parse_error_report",
       "position": { "x": 280, "y": 0 },
       "contract": {
-        "inputs": "none",
-        "outputs": "Event(output=str, content=Content) — terminal",
+        "inputs": [{ "name": "—", "type": "none" }],
+        "outputs": [
+          { "name": "output", "type": "str" },
+          { "name": "content", "type": "Content", "note": "terminal" }
+        ],
         "reads": [],
         "writes": [],
         "sideEffects": [],
@@ -39,8 +51,20 @@
       "label": "triage_agent (LlmAgent)",
       "position": { "x": 280, "y": 200 },
       "contract": {
-        "inputs": "dict (alert, coerced to a user turn)",
-        "outputs": "types.Content (investigation summary)",
+        "inputs": [
+          {
+            "name": "alert",
+            "type": "dict",
+            "note": "coerced to a user turn"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "summary",
+            "type": "types.Content",
+            "note": "investigation summary"
+          }
+        ],
         "reads": ["alert"],
         "writes": ["triage_findings"],
         "sideEffects": [
@@ -57,8 +81,17 @@
       "label": "maintenance_report",
       "position": { "x": 280, "y": 400 },
       "contract": {
-        "inputs": "dict (alert, from maintenance_gate's under_maintenance route)",
-        "outputs": "Event(output=str, content=Content) — terminal",
+        "inputs": [
+          {
+            "name": "alert",
+            "type": "dict",
+            "note": "from maintenance_gate under_maintenance route"
+          }
+        ],
+        "outputs": [
+          { "name": "output", "type": "str" },
+          { "name": "content", "type": "Content", "note": "terminal" }
+        ],
         "reads": ["maintenance_check"],
         "writes": [],
         "sideEffects": [],
@@ -71,8 +104,20 @@
       "label": "telemetry_metrics_analysis_agent (task delegation)",
       "position": { "x": 580, "y": 400 },
       "contract": {
-        "inputs": "Task-delegation request (project/node/alert_type/alert_time, from triage_agent's tool-call args)",
-        "outputs": "TelemetryAnalysisResult (typed: summary, anomaly_detected, contributing_metrics) via finish_task",
+        "inputs": [
+          {
+            "name": "request",
+            "type": "TaskDelegationRequest",
+            "note": "project, node, alert_type, alert_time from triage_agent tool-call args"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "result",
+            "type": "TelemetryAnalysisResult",
+            "note": "summary, anomaly_detected, contributing_metrics via finish_task"
+          }
+        ],
         "reads": [],
         "writes": [],
         "sideEffects": [
@@ -88,8 +133,20 @@
       "label": "categorizer_agent (LlmAgent)",
       "position": { "x": 580, "y": 200 },
       "contract": {
-        "inputs": "types.Content (triage_agent's summary, coerced to a user turn)",
-        "outputs": "dict (RootCauseCategorization: root_cause_category, root_cause_reasoning) via output_schema",
+        "inputs": [
+          {
+            "name": "summary",
+            "type": "types.Content",
+            "note": "triage_agent summary, coerced to a user turn"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "root_cause",
+            "type": "RootCauseCategorization",
+            "note": "root_cause_category, root_cause_reasoning via output_schema"
+          }
+        ],
         "reads": ["triage_findings"],
         "writes": ["root_cause"],
         "sideEffects": [],
@@ -102,8 +159,17 @@
       "label": "report_assembler",
       "position": { "x": 830, "y": 200 },
       "contract": {
-        "inputs": "dict (RootCauseCategorization, from categorizer_agent)",
-        "outputs": "Event(output=str, content=Content) — terminal",
+        "inputs": [
+          {
+            "name": "root_cause",
+            "type": "RootCauseCategorization",
+            "note": "from categorizer_agent"
+          }
+        ],
+        "outputs": [
+          { "name": "output", "type": "str" },
+          { "name": "content", "type": "Content", "note": "terminal" }
+        ],
         "reads": ["alert", "triage_findings"],
         "writes": [],
         "sideEffects": [],

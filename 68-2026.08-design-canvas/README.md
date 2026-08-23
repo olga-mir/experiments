@@ -36,5 +36,6 @@ Use **Open graph-map-data.json** to load the synthesis artifact from any `/desig
 |-------|-------|---------|
 | `kind: "start"` \| `"end"` | node | Renders as a terminal pill instead of a contract box |
 | `contract` | node | Collapsed contract details (omitted on START/END) |
+| `contract.inputs` / `contract.outputs` | node | Array of `{ name, type, note? }` — legacy prose strings still parse |
 | `label` | edge | Route name shown on the edge |
 | `dashed: true` | edge | Dotted line (task delegation, sub-agent calls, etc.) |
