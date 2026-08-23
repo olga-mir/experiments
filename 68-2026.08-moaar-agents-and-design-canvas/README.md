@@ -12,4 +12,4 @@ The original investigates server-monitoring alerts by dynamically calling diagno
 
 See [`spec.md`](spec.md) for the full design — data/API contracts, tool scope, the orchestration graph, and open questions — and [`alert-triage-agent/`](alert-triage-agent/) for the implementation (ADK + `agents-cli` project, Agent Engine deployment target).
 
-**Not yet started:** "design canvas," the other half of this experiment's name — a separate feature planned for a later step, not part of the alert triage agent's design.
+**"Design canvas,"** the other half of this experiment's original name, turned out to be a separate concern and now lives in its own sibling experiment: [`../68-2026.08-design-canvas/`](../68-2026.08-design-canvas/) (not started — setup notes and sample data only, the sample data is real output derived from this agent's `Workflow` graph).

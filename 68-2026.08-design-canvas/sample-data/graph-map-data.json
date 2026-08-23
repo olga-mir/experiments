@@ -1,0 +1,117 @@
+{
+  "nodes": [
+    {
+      "id": "maintenance_gate",
+      "label": "maintenance_gate",
+      "position": { "x": 0, "y": 200 },
+      "contract": {
+        "inputs": "types.Content (raw alert message, expected JSON matching Alert)",
+        "outputs": "Event(output=dict|None, route=investigate|under_maintenance|parse_error)",
+        "reads": [],
+        "writes": ["alert", "maintenance_check"],
+        "sideEffects": [],
+        "idempotent": false,
+        "failureBehavior": "Unparsable/malformed alert routes to parse_error instead of raising. Maintenance decision itself is a coin-flip placeholder (nondeterministic by design, see spec.md §5.5)."
+      }
+    },
+    {
+      "id": "parse_error_report",
+      "label": "parse_error_report",
+      "position": { "x": 280, "y": 0 },
+      "contract": {
+        "inputs": "none",
+        "outputs": "Event(output=str, content=Content) — terminal",
+        "reads": [],
+        "writes": [],
+        "sideEffects": [],
+        "idempotent": true,
+        "failureBehavior": "None expected — pure rendering of a fixed message"
+      }
+    },
+    {
+      "id": "triage_agent",
+      "label": "triage_agent (LlmAgent)",
+      "position": { "x": 280, "y": 200 },
+      "contract": {
+        "inputs": "dict (alert, coerced to a user turn)",
+        "outputs": "types.Content (investigation summary)",
+        "reads": ["alert"],
+        "writes": ["triage_findings"],
+        "sideEffects": [
+          "k8s_node_status_check tool call (Kubernetes API read)",
+          "k8s_pod_status_check tool call (Kubernetes API read)",
+          "task-delegates to telemetry_metrics_analysis_agent"
+        ],
+        "idempotent": false,
+        "failureBehavior": "Tool failures return a typed dict with error set instead of raising — the LLM reasons over a degraded/partial investigation rather than the run crashing"
+      }
+    },
+    {
+      "id": "maintenance_report",
+      "label": "maintenance_report",
+      "position": { "x": 280, "y": 400 },
+      "contract": {
+        "inputs": "dict (alert, from maintenance_gate's under_maintenance route)",
+        "outputs": "Event(output=str, content=Content) — terminal",
+        "reads": ["maintenance_check"],
+        "writes": [],
+        "sideEffects": [],
+        "idempotent": true,
+        "failureBehavior": "Missing/partial state renders with \"unknown\" fallbacks rather than raising"
+      }
+    },
+    {
+      "id": "telemetry_metrics_analysis_agent",
+      "label": "telemetry_metrics_analysis_agent (task delegation)",
+      "position": { "x": 580, "y": 400 },
+      "contract": {
+        "inputs": "Task-delegation request (project/node/alert_type/alert_time, from triage_agent's tool-call args)",
+        "outputs": "TelemetryAnalysisResult (typed: summary, anomaly_detected, contributing_metrics) via finish_task",
+        "reads": [],
+        "writes": [],
+        "sideEffects": [
+          "gcp_node_metrics_check tool call (Cloud Monitoring read)",
+          "gcp_heartbeat_check tool call (Cloud Monitoring read)"
+        ],
+        "idempotent": false,
+        "failureBehavior": "Tool failures return a typed dict with error set, same pattern as the k8s tools"
+      }
+    },
+    {
+      "id": "categorizer_agent",
+      "label": "categorizer_agent (LlmAgent)",
+      "position": { "x": 580, "y": 200 },
+      "contract": {
+        "inputs": "types.Content (triage_agent's summary, coerced to a user turn)",
+        "outputs": "dict (RootCauseCategorization: root_cause_category, root_cause_reasoning) via output_schema",
+        "reads": ["triage_findings"],
+        "writes": ["root_cause"],
+        "sideEffects": [],
+        "idempotent": false,
+        "failureBehavior": "No explicit handling — relies on ADK's output_schema validation"
+      }
+    },
+    {
+      "id": "report_assembler",
+      "label": "report_assembler",
+      "position": { "x": 830, "y": 200 },
+      "contract": {
+        "inputs": "dict (RootCauseCategorization, from categorizer_agent)",
+        "outputs": "Event(output=str, content=Content) — terminal",
+        "reads": ["alert", "triage_findings"],
+        "writes": [],
+        "sideEffects": [],
+        "idempotent": true,
+        "failureBehavior": "Missing state renders with \"unknown host\"/empty-string fallbacks rather than raising"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "maintenance_gate", "target": "triage_agent", "label": "investigate" },
+    { "id": "e2", "source": "maintenance_gate", "target": "maintenance_report", "label": "under_maintenance" },
+    { "id": "e3", "source": "maintenance_gate", "target": "parse_error_report", "label": "parse_error" },
+    { "id": "e4", "source": "triage_agent", "target": "telemetry_metrics_analysis_agent", "label": "task delegation" },
+    { "id": "e5", "source": "triage_agent", "target": "categorizer_agent" },
+    { "id": "e6", "source": "categorizer_agent", "target": "report_assembler" }
+  ]
+}

@@ -1,0 +1,19 @@
+# Node Contracts — Alert Triage Agent (ADK `Workflow`)
+
+Source: `alert-triage-agent/app/agent.py`, `app/maintenance.py`. See `spec.md` for the full design.
+
+| Node | Inputs (type) | Outputs (type) | Reads from state | Writes to state | Side effects (external calls) | Idempotent? | Failure behavior |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `maintenance_gate` | `types.Content` (raw alert message, expected JSON matching `Alert`) | `Event(output=dict\|None, route)` | none | `alert`, `maintenance_check` (on `investigate`/`under_maintenance` only) | none | No — coin-flip placeholder (§5.5 of spec.md) makes the maintenance decision nondeterministic by design; parsing itself is pure | Unparsable/malformed alert routes to `parse_error` instead of raising |
+| `parse_error_report` | none (`None`) | `Event(output=str, content=Content)` — terminal | none | none | none | Yes | None expected — pure rendering of a fixed message |
+| `maintenance_report` | `dict` (alert, from `maintenance_gate`'s `under_maintenance` route) | `Event(output=str, content=Content)` — terminal | `maintenance_check` | none | none | Yes | Missing/partial state renders with `"unknown"` fallbacks rather than raising |
+| `triage_agent` | `dict` (alert, coerced to a user turn) | `types.Content` (investigation summary) | `alert` (via `{alert}` instruction placeholder) | `triage_findings` (via `output_key`) | Tool calls: `k8s_node_status_check`, `k8s_pod_status_check` (Kubernetes API reads); task-delegates to `telemetry_metrics_analysis_agent` | No — LLM-driven; underlying tool calls are read-only | Tool failures return a typed dict with `error` set (see `app/k8s_tools.py`) instead of raising, so the LLM reasons over a degraded/partial investigation rather than the run crashing |
+| `telemetry_metrics_analysis_agent` | Task-delegation request (project/node/alert_type/alert_time, supplied by `triage_agent`'s tool-call args) | `TelemetryAnalysisResult` (typed: `summary`, `anomaly_detected`, `contributing_metrics`) via `finish_task` | none (fresh task per call) | none (result returns to `triage_agent` only, not written to shared state) | Tool calls: `gcp_node_metrics_check`, `gcp_heartbeat_check` (Cloud Monitoring reads) | No — LLM-driven; underlying tool calls are read-only | Tool failures return a typed dict with `error` set, same pattern as the k8s tools |
+| `categorizer_agent` | `types.Content` (triage_agent's summary, coerced to a user turn) | `dict` (`RootCauseCategorization`: `root_cause_category`, `root_cause_reasoning`) via `output_schema` | `triage_findings` (via `{triage_findings}` instruction placeholder) | `root_cause` (via `output_key`) | none — pure classification, no tools | No — LLM-driven | No explicit handling; relies on ADK's `output_schema` validation |
+| `report_assembler` | `dict` (`RootCauseCategorization`, from `categorizer_agent`) | `Event(output=str, content=Content)` — terminal | `alert`, `triage_findings` | none | none | Yes | Missing state renders with `"unknown host"`/empty-string fallbacks rather than raising |
+
+## Notes
+
+- `maintenance_gate` is the workflow's entry `FunctionNode` (edge from `START`) — no LLM call, deterministic except for the coin-flip placeholder standing in for a real maintenance-window lookup.
+- `telemetry_metrics_analysis_agent` is not a `Workflow` graph node — it's an ADK 2.0 task-delegation sub-agent (`mode="task"`) attached to `triage_agent` via `sub_agents=[...]`, which is why it has no state reads/writes of its own; it's included here because it's a real contract boundary (the one LLM-to-LLM call in the system) even though it isn't wired through `edges=[...]`.
+- `k8s_node_status_check` and `k8s_pod_status_check` are plain Python tools, not separate workflow nodes — `triage_agent`'s row covers them as side effects, per spec.md §5.3.
