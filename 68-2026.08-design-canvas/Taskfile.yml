@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  install:
+    desc: Install dependencies for the map-viewer app
+    cmds:
+      - cd map-viewer && npm install
+
+  build:
+    desc: Build the map-viewer app to static dist files
+    cmds:
+      - cd map-viewer && npm run build
+
+  deploy:
+    desc: Deploy the map-viewer app to Cloudflare Pages using Wrangler
+    deps: [build]
+    cmds:
+      - cd map-viewer && npx wrangler pages deploy dist
