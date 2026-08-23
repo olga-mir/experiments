@@ -76,3 +76,129 @@ body {
   width: 100%;
   height: 100%;
 }
+
+.contract-node {
+  position: relative;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  padding: 10px 28px 10px 12px;
+  min-width: 168px;
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #fef2f2;
+}
+
+.contract-node--idempotent {
+  background: #f0fdf4;
+}
+
+.contract-node--expanded {
+  min-width: 240px;
+  max-width: 320px;
+  cursor: default;
+}
+
+.contract-node__handle {
+  background: #64748b !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+
+.contract-node__toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #fff;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.contract-node__label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+  text-align: left;
+}
+
+.contract-details {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contract-io__heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0369a1;
+  margin-bottom: 4px;
+}
+
+.contract-io__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contract-io__row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(88px, 1.2fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.contract-io__name {
+  font-weight: 600;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.contract-io__type {
+  color: #7c3aed;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+}
+
+.contract-io__note {
+  grid-column: 1 / -1;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.contract-meta {
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: left;
+  color: #334155;
+}
+
+.contract-meta__label {
+  display: inline-block;
+  min-width: 52px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: lowercase;
+}
+
+.contract-meta__list {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+
