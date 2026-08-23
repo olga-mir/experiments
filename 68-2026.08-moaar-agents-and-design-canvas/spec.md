@@ -19,7 +19,7 @@ If you have local clones of these repos, tell the assistant the paths so it can 
 | NeMo component | Mechanism | ADK target | Mechanism |
 |---|---|---|---|
 | `alert_triage_agent_workflow` (`register.py`) | LangGraph `StateGraph` + `ToolNode`, manual ReAct loop | `TriageAgent` | `LlmAgent` with `tools=[...]`, ADK's built-in function-calling loop |
-| `maintenance_check` | Pre-graph gate, short-circuits before agent runs | `MaintenanceGate` | Plain Python pre-check invoked from the root orchestrator (`SequentialAgent` step or a callback `before_agent_callback`) — deterministic, no LLM call. Minimal build backs the decision with a **coin flip** placeholder (see §5.5) rather than a real maintenance-window lookup, to be replaced once a real maintenance data source is chosen |
+| `maintenance_check` | Pre-graph gate, short-circuits before agent runs | `MaintenanceGate` | Deterministic `FunctionNode` (`maintenance_gate`), the workflow's entry node — routes on `investigate` / `under_maintenance` / `parse_error`, no LLM call. Minimal build backs the decision with a **coin flip** placeholder (see §5.5) rather than a real maintenance-window lookup, to be replaced once a real maintenance data source is chosen |
 | `telemetry_metrics_analysis_agent` | Nested LangGraph `StateGraph` exposed as a callable tool | `TelemetryAgent` | ADK sub-agent wrapped via `AgentTool` — matches the "agent as tool" pattern natively |
 | `host_performance_check_tool`, `hardware_check_tool`, `monitoring_process_check_tool`, `network_connectivity_check_tool`, `telemetry_metrics_host_performance_check_tool`, `telemetry_metrics_host_heartbeat_check_tool` | `FunctionInfo.from_fn`, each: fetch raw data → LLM-summarize → return `str` | ADK `FunctionTool`s | See §3/§5 — reduced set backed by k8s API / Cloud Monitoring, typed return, no per-tool LLM summarization pass (LLM reasoning happens once, at the orchestrator) |
 | `categorizer_tool` | LLM classification appended as a markdown section | `categorize_root_cause` | `FunctionTool` or final `output_schema`-typed field on `TriageAgent`'s last turn |
@@ -42,30 +42,28 @@ Reduce to tools that map cleanly onto GKE/k8s API + Cloud Monitoring with no inv
 - **Workload-to-workload connectivity** (Service/Endpoints reachability, cross-namespace network policy checks, actual ping/telnet-equivalent probes) — `k8s_pod_status_check`'s readiness signal is the v1 proxy; a dedicated connectivity tool is future work once it's clear pod health alone under- or over-reports real connectivity issues.
 - Anything IPMI-specific beyond what `k8s_node_status_check` covers (out-of-band hardware sensors — not exposed via k8s API at all; permanently out of scope unless a specific need shows up).
 
-**Deferred:** the `telemetry_metrics_analysis_agent` sub-agent is **kept** (not stubbed) since it's the one component that exercises the ADK sub-agent-as-tool pattern the mission's "design canvas" experiment presumably wants to demonstrate — it wraps `gcp_node_metrics_check` + `gcp_heartbeat_check`.
+**Deferred:** the `telemetry_metrics_analysis_agent` sub-agent is **kept** (not stubbed) since it's the one component that exercises ADK's sub-agent-as-tool / task-delegation pattern — it wraps `gcp_node_metrics_check` + `gcp_heartbeat_check`. (Note: "design canvas," the second half of this experiment's folder name, is a separate feature to be built alongside this agent in a later step — not part of this agent's design.)
 
 ## 4. Orchestration graph
 
+Built on ADK's graph-based `Workflow` API (`google.adk.workflow`), not `SequentialAgent`. `SequentialAgent` was the first pass and is deprecated in this ADK version in favor of `Workflow` — moving to the real graph engine (explicit nodes, edges, and routed conditionals) is itself part of the exercise, since the NeMo source is an explicit `LangGraph` `StateGraph` and `Workflow` is ADK's idiomatic equivalent, unlike `SequentialAgent`'s implicit linear chaining.
+
 ```
-Alert (JSON) → MaintenanceGate ──[under maintenance]──→ MaintenanceReport → END
-                    │
-                    │ [no ongoing maintenance]
-                    ▼
-              TriageAgent (LlmAgent, ReAct loop)
-                    │  tools:
-                    │   - k8s_node_status_check
-                    │   - k8s_pod_status_check   (also serves as v1 connectivity/health proxy)
-                    │   - telemetry_agent_tool ──(AgentTool)──→ TelemetryAgent (LlmAgent)
-                    │                                                 tools:
-                    │                                                  - gcp_node_metrics_check
-                    │                                                  - gcp_heartbeat_check
-                    ▼
-              categorize_root_cause
-                    ▼
-              TriageReport → END
+START ──▶ maintenance_gate ──[investigate]──▶ triage_agent ──▶ categorizer_agent ──▶ report_assembler
+               │        │                          │  tools:
+               │        │                          │   - k8s_node_status_check
+               │        │                          │   - k8s_pod_status_check (also v1 connectivity/health proxy)
+               │        │                          │   - telemetry_metrics_analysis_agent (task delegation) ──▶ LlmAgent
+               │        │                                                                       tools:
+               │        │                                                                        - gcp_node_metrics_check
+               │        │                                                                        - gcp_heartbeat_check
+               │        └──[under_maintenance]──▶ maintenance_report
+               └──[parse_error]──▶ parse_error_report
 ```
 
-`MaintenanceGate` short-circuiting before the LLM agent runs at all (matching NeMo's `_process_alert`) is implemented as a plain conditional in the root orchestration function/`SequentialAgent`, not as an LLM decision — deterministic, no reasoning needed, and for the minimal build the decision itself is a coin flip placeholder (§5.5) standing in for a real maintenance-window lookup. Root cause categorization is a separate deterministic-ish LLM call after the ReAct loop ends, mirroring NeMo's `_process_alert` (agent loop, then `categorizer_tool.arun(result)`).
+`maintenance_gate` is a deterministic `FunctionNode` (app/maintenance.py) — no LLM call, no reasoning needed — that parses the incoming alert and routes on three explicit conditions: `investigate` (continue into the LLM pipeline), `under_maintenance` (short-circuit to a maintenance report — decision is the coin-flip placeholder, §5.5), and `parse_error` (malformed alert, short-circuit to an error report). `triage_agent` and `categorizer_agent` are `LlmAgent`s used directly as workflow nodes (auto-wrapped). `report_assembler` is a deterministic `FunctionNode` that renders `TriageReport`'s fields to markdown (§5.6) — the ADK 2.0 workflow docs' "node_input type by predecessor" table governs each edge here: `categorizer_agent` sets `output_schema`, so `report_assembler` receives a `dict`, not `types.Content`.
+
+Root cause categorization runs as a separate node after the triage ReAct loop ends, mirroring NeMo's `_process_alert` (agent loop, then `categorizer_tool.arun(result)`) — just expressed as a graph edge instead of a second function call in Python.
 
 ## 5. Data & API contracts
 

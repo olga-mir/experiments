@@ -17,7 +17,11 @@ No LLM calls here — the gate is plain Python, so it's tested as such
 rather than through an eval loop.
 """
 
-from app.maintenance import check_maintenance
+import json
+
+from google.genai import types
+
+from app.maintenance import check_maintenance, maintenance_gate
 from app.models import Alert
 
 ALERT = Alert(
@@ -28,6 +32,10 @@ ALERT = Alert(
     alert_type="high_cpu",
     timestamp="2026-08-23T10:00:00.000000",
 )
+
+
+def _content(text: str) -> types.Content:
+    return types.Content(role="user", parts=[types.Part(text=text)])
 
 
 def test_check_maintenance_under_maintenance(monkeypatch) -> None:
@@ -49,3 +57,35 @@ def test_check_maintenance_not_under_maintenance(monkeypatch) -> None:
 
     assert result.under_maintenance is False
     assert result.window is None
+
+
+def test_maintenance_gate_routes_to_under_maintenance(monkeypatch) -> None:
+    monkeypatch.setattr("app.maintenance.random.random", lambda: 0.0)
+
+    event = maintenance_gate(_content(ALERT.model_dump_json()))
+
+    assert event.actions.route == "under_maintenance"
+    assert event.output["host_id"] == ALERT.host_id
+    assert event.actions.state_delta["maintenance_check"]["under_maintenance"] is True
+
+
+def test_maintenance_gate_routes_to_investigate(monkeypatch) -> None:
+    monkeypatch.setattr("app.maintenance.random.random", lambda: 0.99)
+
+    event = maintenance_gate(_content(ALERT.model_dump_json()))
+
+    assert event.actions.route == "investigate"
+    assert event.actions.state_delta["alert"]["host_id"] == ALERT.host_id
+
+
+def test_maintenance_gate_routes_to_parse_error_on_malformed_input() -> None:
+    event = maintenance_gate(_content("not valid json"))
+
+    assert event.actions.route == "parse_error"
+    assert event.output is None
+
+
+def test_maintenance_gate_routes_to_parse_error_on_missing_fields() -> None:
+    event = maintenance_gate(_content(json.dumps({"host_id": "n1"})))
+
+    assert event.actions.route == "parse_error"

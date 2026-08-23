@@ -13,24 +13,39 @@
 # limitations under the License.
 """Alert triage agent — see ../spec.md for the full design.
 
-Pipeline: MaintenanceGate (before_agent_callback, deterministic) -> TriageAgent
-(ReAct loop over k8s tools + telemetry sub-agent) -> CategorizerAgent
-(structured root-cause classification) -> ReportAssembler (deterministic).
+Built on ADK's graph-based Workflow API (google.adk.workflow), not the
+deprecated SequentialAgent — this migration is itself part of the exercise
+(the original NeMo/LangGraph source is an explicit state graph; ADK's
+Workflow is the idiomatic equivalent, vs. SequentialAgent's implicit linear
+chaining).
+
+Graph:
+
+    START -> maintenance_gate --[under_maintenance]--> maintenance_report
+                    |          --[parse_error]-------> parse_error_report
+                    |
+                    +--[investigate]--> triage_agent -> categorizer_agent -> report_assembler
+
+maintenance_gate is a deterministic FunctionNode (see app/maintenance.py).
+triage_agent is an LlmAgent (ReAct loop over k8s tools + the telemetry
+sub-agent). categorizer_agent is an LlmAgent with output_schema for
+structured root-cause classification. report_assembler is a deterministic
+FunctionNode that renders the final markdown report.
 """
 
 import os
-from collections.abc import AsyncGenerator
 
 import google.auth
-from google.adk.agents import Agent, BaseAgent, SequentialAgent
-from google.adk.agents.invocation_context import InvocationContext
+from google.adk.agents import Agent
+from google.adk.agents.context import Context
 from google.adk.apps import App
-from google.adk.events import Event
+from google.adk.events.event import Event
 from google.adk.models import Gemini
+from google.adk.workflow import Workflow
 from google.genai import types
 
 from app.k8s_tools import k8s_node_status_check, k8s_pod_status_check
-from app.maintenance import maintenance_gate_callback
+from app.maintenance import maintenance_gate
 from app.models import RootCauseCategorization
 from app.telemetry_agent import create_telemetry_agent
 
@@ -76,8 +91,8 @@ Investigation findings:
 """
 
 
-def create_root_agent() -> BaseAgent:
-    triage_agent = Agent(
+def create_triage_agent() -> Agent:
+    return Agent(
         name="triage_agent",
         model=Gemini(
             model="gemini-flash-latest",
@@ -89,7 +104,9 @@ def create_root_agent() -> BaseAgent:
         output_key="triage_findings",
     )
 
-    categorizer_agent = Agent(
+
+def create_categorizer_agent() -> Agent:
+    return Agent(
         name="categorizer_agent",
         model=Gemini(
             model="gemini-flash-latest",
@@ -100,40 +117,88 @@ def create_root_agent() -> BaseAgent:
         output_key="root_cause",
     )
 
-    report_assembler = ReportAssembler(name="report_assembler")
 
-    return SequentialAgent(
-        name="alert_triage_pipeline",
-        sub_agents=[triage_agent, categorizer_agent, report_assembler],
-        before_agent_callback=maintenance_gate_callback,
+def maintenance_report(ctx: Context, node_input: dict) -> Event:
+    """Renders the short-circuit report when maintenance_gate routes here."""
+    alert = node_input or {}
+    maintenance_check = ctx.state.get("maintenance_check") or {}
+    window = maintenance_check.get("window") or {}
+    maintenance_end = window.get("maintenance_end")
+    window_status = "ongoing" if not maintenance_end else f"ends {maintenance_end}"
+
+    report = (
+        f"# Alert Triage Report — {alert.get('host_id', 'unknown host')}\n\n"
+        f"## Maintenance Status\n"
+        f"Host `{alert.get('host_id', 'unknown host')}` is under maintenance "
+        f"(window started {window.get('maintenance_start', 'unknown')}, {window_status}). "
+        f"No further investigation was performed.\n\n"
+        f"## Root Cause Category\nmaintenance\n"
+    )
+    return Event(
+        output=report,
+        content=types.Content(role="model", parts=[types.Part(text=report)]),
     )
 
 
-class ReportAssembler(BaseAgent):
+def parse_error_report(node_input: None) -> Event:
+    """Renders the short-circuit report when maintenance_gate can't parse the alert."""
+    report = (
+        "# Alert Triage Report\n\n"
+        "Could not parse the incoming message as a valid alert (expected JSON "
+        "matching the Alert schema — see app/models.py). No investigation was "
+        "performed.\n"
+    )
+    return Event(
+        output=report,
+        content=types.Content(role="model", parts=[types.Part(text=report)]),
+    )
+
+
+def report_assembler(ctx: Context, node_input: dict) -> Event:
     """Deterministic final step — renders TriageReport contract fields to markdown.
 
     See spec.md §5.6: TriageReport is the data contract, markdown is a
     rendering concern kept at this one edge, not threaded through the graph.
+    node_input is categorizer_agent's structured output_schema dict
+    (RootCauseCategorization), per the Workflow node_input-type rule for an
+    LlmAgent predecessor that sets output_schema.
     """
+    alert = ctx.state.get("alert") or {}
+    findings = ctx.state.get("triage_findings", "")
+    category = node_input.get("root_cause_category", "unknown")
+    reasoning = node_input.get("root_cause_reasoning", "")
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
-        alert = ctx.session.state.get("alert") or {}
-        findings = ctx.session.state.get("triage_findings", "")
-        root_cause = ctx.session.state.get("root_cause") or {}
-        category = root_cause.get("root_cause_category", "unknown")
-        reasoning = root_cause.get("root_cause_reasoning", "")
+    report = (
+        f"# Alert Triage Report — {alert.get('host_id', 'unknown host')}\n\n"
+        f"## Investigation\n{findings}\n\n"
+        f"## Root Cause Category\n{category}\n\n{reasoning}\n"
+    )
+    return Event(
+        output=report,
+        content=types.Content(role="model", parts=[types.Part(text=report)]),
+    )
 
-        report = (
-            f"# Alert Triage Report — {alert.get('host_id', 'unknown host')}\n\n"
-            f"## Investigation\n{findings}\n\n"
-            f"## Root Cause Category\n{category}\n\n{reasoning}\n"
-        )
-        yield Event(
-            author=self.name,
-            content=types.Content(role="model", parts=[types.Part(text=report)]),
-        )
+
+def create_root_agent() -> Workflow:
+    triage_agent = create_triage_agent()
+    categorizer_agent = create_categorizer_agent()
+
+    return Workflow(
+        name="alert_triage_pipeline",
+        edges=[
+            ("START", maintenance_gate),
+            (
+                maintenance_gate,
+                {
+                    "investigate": triage_agent,
+                    "under_maintenance": maintenance_report,
+                    "parse_error": parse_error_report,
+                },
+            ),
+            (triage_agent, categorizer_agent),
+            (categorizer_agent, report_assembler),
+        ],
+    )
 
 
 root_agent = create_root_agent()
