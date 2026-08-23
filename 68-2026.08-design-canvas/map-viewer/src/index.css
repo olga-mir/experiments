@@ -202,3 +202,26 @@ body {
   padding-left: 16px;
 }
 
+.graph-about {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.graph-about p {
+  margin: 0;
+}
+
+.graph-about a {
+  color: #0369a1;
+  text-decoration: none;
+}
+
+.graph-about a:hover {
+  text-decoration: underline;
+}
+

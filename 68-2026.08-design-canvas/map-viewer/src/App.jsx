@@ -49,6 +49,32 @@ function GraphToolbar({ sourceLabel, error, onPickFile }) {
   );
 }
 
+function GraphAboutFooter() {
+  return (
+    <footer className="graph-about">
+      <p>
+        This view is built from data in{' '}
+        <a
+          href="https://github.com/olga-mir/experiments/tree/main/68-2026.08-design-canvas"
+          target="_blank"
+          rel="noreferrer"
+        >
+          olga-mir/experiments/68-2026.08-design-canvas
+        </a>
+        , for a demo Incident triage agent adopted from{' '}
+        <a
+          href="https://github.com/NVIDIA/NeMo-Agent-Toolkit/tree/develop/examples/advanced_agents/alert_triage_agent"
+          target="_blank"
+          rel="noreferrer"
+        >
+          NVIDIA NeMo Agent Toolkit — alert_triage_agent
+        </a>
+        .
+      </p>
+    </footer>
+  );
+}
+
 export default function App() {
   const [sourceLabel, setSourceLabel] = useState('sample-data/graph-map-data.json');
   const [error, setError] = useState('');
@@ -105,6 +131,7 @@ export default function App() {
           <MiniMap />
         </ReactFlow>
       </div>
+      <GraphAboutFooter />
     </div>
   );
 }
