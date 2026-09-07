@@ -36,8 +36,8 @@ gcloud container node-pools create "test-pool" \
     --region="${REGION}" \
     --machine-type="e2-standard-2" \
     --num-nodes=1 \
-    --node-taints="dedicated=test-pool:NoSchedule" \
-    --node-labels="pool=test-pool" \
+    --node-taints="dedicated=noisy-node:NoSchedule" \
+    --node-labels="workload=noisy-node" \
     --enable-autoscaling --min-nodes=1 --max-nodes=3 \
     --disk-type="pd-standard" \
     --disk-size=50
