@@ -21,7 +21,9 @@ gcloud container clusters create "${CLUSTER_NAME}" \
     --workload-pool="${PROJECT_ID}.svc.id.goog" \
     --enable-managed-prometheus \
     --enable-ip-alias \
-    --machine-type "e2-medium"
+    --machine-type "e2-medium" \
+    --disk-type="pd-standard" \
+    --disk-size=50
 
 echo "Creating tainted nodepool for testing (2 CPUs, Static CPU Manager)..."
 # Create a nodepool with e2-standard-2 (2 CPUs)
@@ -36,7 +38,9 @@ gcloud container node-pools create "test-pool" \
     --num-nodes=1 \
     --node-taints="dedicated=test-pool:NoSchedule" \
     --node-labels="pool=test-pool" \
-    --enable-autoscaling --min-nodes=1 --max-nodes=3
+    --enable-autoscaling --min-nodes=1 --max-nodes=3 \
+    --disk-type="pd-standard" \
+    --disk-size=50
 
 echo "Fetching cluster credentials..."
 gcloud container clusters get-credentials "${CLUSTER_NAME}" --region="${REGION}"
