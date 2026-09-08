@@ -9,6 +9,7 @@ vars:
     sh: echo "${PROJECT_ID:?'PROJECT_ID environment variable is required'}"
   REGION:
     sh: echo "${REGION:?'REGION environment variable is required'}"
+  CLUSTER_NAME: "{{.SERVICE_NAME}}-cluster"
   GIT_COMMIT:
     sh: git rev-parse --short HEAD
 
@@ -21,7 +22,19 @@ tasks:
     cmds:
       - echo "PROJECT_ID={{.PROJECT_ID}}"
       - echo "REGION={{.REGION}}"
+      - echo "CLUSTER_NAME={{.CLUSTER_NAME}}"
       - echo "IMAGE_PATH={{.IMAGE_PATH}}"
+
+  provision-cluster:
+    desc: Provision GKE cluster with gcloud
+    cmds:
+      - CLUSTER_NAME={{.CLUSTER_NAME}} ./provision.sh
+
+  delete-cluster:
+    desc: Delete GKE cluster
+    cmds:
+      - gcloud container clusters delete {{.CLUSTER_NAME}} --region={{.REGION}} --quiet
+
 
   lima-start:
     desc: Start lima instance

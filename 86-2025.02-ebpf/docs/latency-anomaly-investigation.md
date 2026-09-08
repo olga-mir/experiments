@@ -1,0 +1,100 @@
+# Investigation: the 8.3s p99 run-queue latency reading
+
+Started 2026-09-08, following a review of `ebpf-noisy-neighbor-analysis.md` ahead of the
+CloudCon Sydney talk. The headline number in that report — p99 run-queue latency peaking
+around 8.3 seconds — doesn't hold up as a precise measurement on inspection. This doc tracks
+why, what's been ruled out, and what's still open.
+
+## 1. The 8.3s figure is a histogram artifact, not a measured value
+
+`get_hist_bucket()` in `bpf/noisy-neighbour.bpf.c` buckets latency on a log2 scale in
+microseconds, capped at 24 buckets (`NUM_BUCKETS`). Bucket *b* (for b < 23) covers
+`[2^b, 2^(b+1))` µs. Bucket 23 is different in kind: it's the overflow catch-all for
+**everything ≥ 2^23 µs = 8.388608s, with no upper bound** — confirmed by the code's own
+comment (`bucket 23: >= ~8.3s`).
+
+The Go collector (`main.go`, `runqCollector.Collect`) then merges that unbounded overflow
+bucket into the same finite-looking Prometheus bucket as the last *real* bounded bucket
+(`[4.194304s, 8.388608s)`):
+
+```go
+// Absorb BPF overflow bucket (23) into the last Prometheus bucket,
+// clamping those events to ≤ bucketBoundsNs[23] (~8.4 s).
+cumulBuckets[bucketBoundsNs[numBuckets-1]] += counts[numBuckets-1]
+```
+
+Because the merged bucket is given a fake finite `le` of 8.388608s, `histogram_quantile`
+has no way to represent "unbounded." If the p99 rank falls in that merged bucket, Prometheus
+reports something at or near 8.388608s **whether the real values were 8.4s or 400s.**
+
+**Correct framing for the talk:** the measurement shows run-queue latency of **at least
+8.39 seconds, quite possibly much more** — not "8.3 seconds." The current histogram design
+cannot distinguish those cases.
+
+**Fix, before trusting or presenting this number:**
+- Give the last Prometheus bucket a real `+Inf` `le` so `histogram_quantile` honestly
+  returns "can't compute a finite quantile here" instead of a fabricated ceiling, and/or
+- Add a small side-channel (a "max raw value seen" per hist-key, or a ring buffer for
+  outlier events) that captures the true magnitude instead of clamping it.
+
+## 2. Ruled out: CFS bandwidth throttling
+
+Checked `container_cpu_cfs_throttled_periods_total` (Max, grouped by pod) in Metrics
+Explorer for the actual test window, filtered to the `test` node pool (where the
+`bully-hog` / victim experiment ran): **flat 0 for every pod** —
+`fluentbit-*`, `gke-metrics-agent-*`, `netd-*`, `node-local-dns-*`, `pdcsi-node-*`,
+`victim-api-*` — across the whole 7:23–10:32 AM window.
+
+This directly rules out victim-pod CFS quota throttling as the mechanism behind the
+anomalous latency reading for this test. (There *is* a large throttling spike visible on
+the `default` node pool in the same window, but that pool wasn't used for this experiment —
+unrelated background churn from other system pods, not part of this investigation.)
+
+## 3. Untested: hypervisor steal time (E2 dynamic resource management)
+
+`node_cpu_seconds_total{mode="steal"}` is not currently in the active metric set for this
+cluster. E2 is GCP's cost-optimized, dynamically-managed machine family (unlike N2/C2's
+dedicated cores) and steal time there is a real, documented characteristic — worth checking
+before ruling it in or out.
+
+**Action:** next time this setup is spun up, confirm node-level CPU metrics (including
+`mode="steal"`) are being scraped by GKE Managed Prometheus — add a PodMonitoring/scrape
+config for `node_cpu_seconds_total` (via node_exporter or the GKE Managed Prometheus
+node-level collector) if it isn't already, then re-run the load test and check steal time
+for the exact window against the anomalous latency events.
+
+## 4. Leading suspect: orphaned entries in `runq_enqueued` (PID reuse)
+
+The `runq_enqueued` BPF hash map has no expiry and no cleanup path other than the delete
+inside `sched_switch` when a PID is matched as `next`. If a task gets a wakeup timestamp
+written (`BPF_NOEXIST` insert) but is never subsequently matched by a `sched_switch` event
+as `next` — it exits, gets reaped, or its scheduling event is otherwise missed — that
+timestamp sits in the map indefinitely. PIDs get reused under load. If an unrelated task
+later inherits that recycled PID and *does* get scheduled, the code looks up the map, finds
+the stale orphaned timestamp, and reports a "latency" that's actually the wall-clock gap
+between some earlier, unrelated task's wakeup and this new task's scheduling — a fabricated
+number with no relationship to real run-queue contention.
+
+This isn't hypothetical for this repo: `outcomes/step01-exploring-loaded-ebpf-program.md`
+(the original Feb 2025 exploration notes) already observed *"This map constantly growing as
+it collects more and more data"* — the exact symptom of this leak, noted over a year ago and
+never resolved.
+
+**Verification (no new code needed):** during/after the next load test, dump
+`runq_enqueued` (`bpftool map dump id <id>`, or extend `list-cgroup-labels.sh`) and check
+how many entries persist and how old their timestamps are relative to "now." A tail of
+entries with old stale timestamps confirms the leak.
+
+**Fix, if confirmed:** key on PID + task start-time (not PID alone) to prevent recycled-PID
+collisions, or hook `sched_process_exit` to clean up orphaned entries proactively.
+
+## Priority order for next test run
+
+1. Dump `runq_enqueued` during/after the load test — cheapest check, no new code, and the
+   most likely root cause given the step01 precedent.
+2. Confirm `node_cpu_seconds_total{mode="steal"}` is scraped via GKE Managed Prometheus,
+   then re-run and cross-check against steal time for the same window.
+3. Fix the histogram's top bucket (`+Inf` `le`, or a raw-max side channel) so future runs
+   report a trustworthy ceiling instead of a clamped one.
+4. Only after 1–3: decide whether the finding is presentable as-is, or needs a corrected
+   number/story for the talk.
