@@ -98,3 +98,41 @@ collisions, or hook `sched_process_exit` to clean up orphaned entries proactivel
    report a trustworthy ceiling instead of a clamped one.
 4. Only after 1–3: decide whether the finding is presentable as-is, or needs a corrected
    number/story for the talk.
+
+## 5. Follow-up plan (2026-09-08)
+
+Pushback on treating the "system processes preempt due to I/O noise" theory as an
+alternative explanation for the original spike: it doesn't fit `bully-hog`'s actual
+workload. `stress-ng --cpu 2 --cpu-method matrixprod` is pure in-cache compute — no
+syscalls, no I/O, nothing to trigger a softirq/kworker/kswapd surge. That mechanism needs
+an I/O- or network-heavy neighbor to be a fair test; the CPU-only run never exercised it
+either way, so its absence there isn't counter-evidence against the theory, just a
+mismatched experiment.
+
+Next steps, as two separate, deliberate tracks:
+
+**Track A — re-run the CPU experiment with the PID-reuse checks from section 4** (today).
+Dump `runq_enqueued` during/after the load test as planned; 4-8s of CFS run-queue latency
+on 2 vCPUs under proportional scheduling doesn't have a sound mechanism behind it (CFS's
+own fairness bounds — `sched_min_granularity_ns` × runnable-task count — don't get you
+anywhere near seconds with a normal handful of runnable tasks), so the leak theory remains
+the leading suspect until the map dump says otherwise.
+
+**Track B — a genuinely separate I/O-stress experiment**, to properly test the
+kernel-thread-preemption theory instead of retrofitting it onto Track A's data:
+- New stressor pod, analogous to `bully-hog.yaml`: disk I/O (`stress-ng --hdd` / `fio`)
+  and/or network I/O (`iperf3`, `fortio`, or `stress-ng --sock`) — pick disk vs. network
+  deliberately, they stress different kernel subsystems.
+- Run the *existing* sched_wakeup/sched_switch tool during this test too. If the theory is
+  right, `prev_cgroup` should start showing `root`/`system.slice/*` for victim starvation
+  events here — that's the actual valid test, which Track A could never have provided.
+- Natural pairing: implement the PSI probe (`/proc/pressure/io`) from
+  `docs/proposal-non-cpu-noisy-neighbours.md` (rated Low complexity there) alongside this
+  run, as a second independent signal for the same test.
+
+**Caveat for interpreting any of this:** system-process/root-cgroup series were
+deliberately stripped down in earlier dashboard views because they produced too much noise
+to sift through. Before concluding anything from historical data about how often `root`/
+`system.slice/*` appears as `prev_cgroup`, confirm whether that stripping happened at the
+dashboard/query level (recoverable — widen the filter) or before data left the collector
+(not recoverable — only future runs will have it).
