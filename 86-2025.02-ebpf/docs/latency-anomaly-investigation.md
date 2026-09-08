@@ -178,3 +178,53 @@ to sift through. Before concluding anything from historical data about how often
 `system.slice/*` appears as `prev_cgroup`, confirm whether that stripping happened at the
 dashboard/query level (recoverable — widen the filter) or before data left the collector
 (not recoverable — only future runs will have it).
+
+### Track B — Implemented (2026-09-09)
+
+Code / manifests / docs only; nothing has been run against GKE yet.
+
+**Stressors** (both mirror `bully-hog.yaml` — `noisy-node` selector + toleration, a CPU
+*request* only and **no CPU limit**, so Burstable QoS keeps them in the shared pool):
+
+- `k8s/bully-io.yaml` — disk: `stress-ng --hdd 2 --hdd-bytes 512m --iomix 2`, writing into
+  an `emptyDir` (node-disk backed) via `--temp-path`, so the writes actually reach the
+  page cache → `wb_workfn` / kworker writeback and the block queue (proposal §2A).
+  `task deploy-bully-io`.
+- `k8s/bully-net.yaml` — network: `stress-ng --sock 4 --udp 2`, high packet rate over
+  loopback → `NET_RX` / `ksoftirqd` (proposal §3A). `task deploy-bully-net`.
+
+Run them **one at a time** — disk vs. network stress different kernel subsystems; disk is
+the cleaner first test for the writeback-preemption story.
+
+**PSI probe** — `psi.go` adds a second `prometheus.Collector` next to `runqCollector`
+(one added line in `main()`). Node pressure from `/proc/pressure/{cpu,io,memory}` (hostPath
+`/host/proc/pressure`, `PSI_PROC_PATH` env, added to `k8s/ebpf-daemonset.yaml`) and
+per-pod cgroup pressure from `/sys/fs/cgroup/<pod>/{cpu,io,memory}.pressure`, emitted as:
+
+- `ebpf_psi_pressure_ratio{resource, kind, window, scope, cgroup}` — gauge, the kernel's
+  `avgN` stall percentage (0–100).
+- `ebpf_psi_stall_seconds_total{resource, kind, scope, cgroup}` — counter, from `total=`
+  (µs → s).
+
+**Verification procedure** — while one stressor runs:
+
+1. Watch `ebpf_psi_pressure_ratio{resource="io"}` (disk run) / `{resource="cpu"}`
+   (network run — softirq stealing CPU) rise, at both `scope="node"` and the victim's
+   `scope="cgroup"` series; `ebpf_psi_stall_seconds_total` gives the monotonic view.
+2. In the same window, check whether `ebpf_runq_latency_nanoseconds`'s `prev_cgroup` label
+   starts carrying `root` / `system.slice/*` (kworker, `ksoftirqd`, writeback) on the
+   victim's starvation events — the signature the kernel-thread-preemption theory predicts,
+   which Track A's pure-compute bully could never produce. **No collector change is
+   needed:** `runqCollector` already emits `prev_cgroup` raw and unfiltered — only the
+   `cgroup` (victim) side gets the `strings.HasPrefix(cgroup, "pod/")` filter; the
+   `prev_cgroup` side is passed straight through (`root`, `system.slice/*`, `unresolved`
+   and all).
+3. Cross-reference: I/O PSI up **and** `prev_cgroup` = system/root on the latency events
+   ⇒ the theory holds for this workload.
+
+**On the stripped-series caveat above, now made actionable:** the raw
+`ebpf_runq_latency_nanoseconds` metric is **unfiltered on `prev_cgroup`**, so any stripping
+of `root` / `system.slice/*` was at the dashboard/query layer, not in the collector.
+Widening the dashboard's `prev_cgroup` filter (or querying Prometheus directly) is
+sufficient to see those series — no collector change and no new data collection required;
+scrapes from any run with this collector already contain them.

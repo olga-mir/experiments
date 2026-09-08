@@ -297,6 +297,7 @@ func main() {
 	mapper := newCgroupMapper()
 
 	prometheus.MustRegister(newRunqCollector(&objs, mapper))
+	prometheus.MustRegister(newPSICollector(mapper))
 
 	go watchRunqEnqueued(&objs) // debug.go: runq_enqueued orphan / PID-reuse leak probe
 
