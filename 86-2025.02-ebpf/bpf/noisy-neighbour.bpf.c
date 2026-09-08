@@ -51,6 +51,18 @@ struct {
     __uint(value_size, sizeof(u64));
 } runq_enqueued SEC(".maps");
 
+// Raw-max side channel (single u64 at key 0). get_hist_bucket() clamps every
+// latency >= 8.388608s into the unbounded overflow bucket 23, so the histogram
+// cannot tell 8s from 800s. This map keeps the true maximum runq_lat ever seen
+// so userspace (ebpf_runq_latency_max_nanoseconds) can report the real
+// magnitude. See docs/latency-anomaly-investigation.md section 1.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u64));
+} runq_lat_max SEC(".maps");
+
 static __always_inline u32 get_hist_bucket(u64 lat_ns)
 {
     // Buckets mirror Prometheus ExponentialBuckets(1000, 2, 24)
@@ -102,6 +114,23 @@ int tp_sched_switch(__u64 *ctx)
     // Filter out minor scheduling delays to focus on heavy-hitter noisy neighbor interference
     if (runq_lat < MIN_RUNQ_LAT_NS) {
         return 0;
+    }
+
+    // Raw-max side channel: keep the largest runq_lat ever seen (>= MIN_RUNQ_LAT_NS,
+    // the same events the histogram bins) so the true magnitude survives the
+    // histogram's unbounded overflow bucket 23. Userspace reads this as
+    // ebpf_runq_latency_max_nanoseconds.
+    //
+    // Plain read-compare-write rather than __sync_val_compare_and_swap: the
+    // atomic CMPXCHG lowering needs BPF ISA v3, which this project's bpf2go
+    // cflags don't enable, and turning it on would change codegen for the whole
+    // (working) program. The only race here is two CPUs seeing the same old max
+    // and the smaller write landing last, which understates the gauge by one
+    // sample until the next larger latency — acceptable for a debug "max seen".
+    u32 max_key = 0;
+    u64 *max_lat = bpf_map_lookup_elem(&runq_lat_max, &max_key);
+    if (max_lat && runq_lat > *max_lat) {
+        *max_lat = runq_lat;
     }
 
     u64 prev_cgroup_id = get_task_cgroup_id(prev);
