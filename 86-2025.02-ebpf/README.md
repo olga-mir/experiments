@@ -104,6 +104,52 @@ fortio load -qps 50 -t 120s http://<perf-lab-svc>/cpu?iterations=100000
 fortio load -qps 20 -t 120s http://<perf-lab-svc>/fanout?workers=20
 ```
 
+## Track B — I/O stress + PSI
+
+`bully-hog` (`stress-ng --cpu ... matrixprod`) is pure in-cache compute — it never touches
+the block layer or the network stack, so it cannot test the "kernel threads / softirq /
+writeback preempt the victim" theory. Track B adds two non-CPU stressors plus a Pressure
+Stall Information (PSI) probe in the collector. See
+[`docs/latency-anomaly-investigation.md`](./docs/latency-anomaly-investigation.md) §5 and
+[`docs/proposal-non-cpu-noisy-neighbours.md`](./docs/proposal-non-cpu-noisy-neighbours.md) §5.
+
+**Run the disk and network stressors one at a time.** They load different kernel
+subsystems — disk drives writeback (`wb_workfn`) and block-queue contention, network drives
+`NET_RX` / `ksoftirqd` — and running both at once makes attribution impossible. Disk is
+the cleaner first test for the writeback-preemption story.
+
+PSI needs the DaemonSet rebuilt and redeployed first, so the new `/host/proc/pressure`
+hostPath mount and `PSI_PROC_PATH` env land:
+
+```bash
+task lima-build-image        # rebuild with psi.go
+task deploy-k8s              # roll the DaemonSet
+```
+
+Then, per run:
+
+```bash
+task deploy-victim           # the pod to watch
+task deploy-bully-io         # disk run: stress-ng --hdd/--iomix into an emptyDir
+# ...observe for a few minutes, then...
+kubectl delete -f k8s/bully-io.yaml
+
+task deploy-bully-net        # network run (SEPARATE): stress-ng --sock/--udp
+kubectl delete -f k8s/bully-net.yaml
+```
+
+What to watch:
+
+- `ebpf_psi_pressure_ratio{resource="io", scope="node"}` and
+  `{resource="io", scope="cgroup", cgroup="pod/<bully-io-uid>/..."}` — climb during the
+  disk run; `{resource="cpu"}` climbs during the network run (softirq stealing CPU).
+- `ebpf_psi_stall_seconds_total` — monotonic stall time, same labels minus `window`.
+- `ebpf_runq_latency_nanoseconds` with the dashboard's `prev_cgroup` filter **widened** to
+  include `root` / `system.slice/*`: if the theory holds, the victim's latency events start
+  attributing to kernel threads (kworker, `ksoftirqd`, writeback) instead of a pod.
+  `runqCollector` already emits `prev_cgroup` unfiltered, so no redeploy is needed for this
+  — only the dashboard filter.
+
 ## View in Cloud Monitoring
 
 Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. The dashboard requires two filters to be set before data appears:
@@ -120,6 +166,8 @@ kubectl get pod <name> -o jsonpath='{.metadata.uid}' | cut -c1-8
 Key metrics:
 - `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s.
 - `ebpf_events_total` — confirms data is flowing from the eBPF ring buffer.
+- `ebpf_psi_pressure_ratio` — Linux PSI stall percentage (0–100), labelled by `resource` (`cpu`/`io`/`memory`), `kind` (`some`/`full`), `window` (`avg10`/`avg60`/`avg300`), `scope` (`node`/`cgroup`) and `cgroup`. See "Track B" above.
+- `ebpf_psi_stall_seconds_total` — cumulative PSI stall time in seconds (`total=` field), same labels minus `window`.
 
 Dashboard panels use `histogram_quantile` over PromQL — not the raw histogram aggregation — to get accurate p50/p99 percentiles. Example noisy-neighbour query (who is preempting pod X?):
 ```promql

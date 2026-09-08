@@ -280,6 +280,7 @@ func main() {
 	mapper := newCgroupMapper()
 
 	prometheus.MustRegister(newRunqCollector(&objs, mapper))
+	prometheus.MustRegister(newPSICollector(mapper))
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
