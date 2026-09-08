@@ -10,16 +10,10 @@ from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 import eks_auth
-import gcp_auth
-import gcp_mcp
 
-CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "")
+CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 AWS_REGION = os.environ["AWS_REGION"]
 ARTIFACT_BUCKET = os.environ["ARTIFACT_BUCKET"]
-GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "")
-GKE_CLUSTER_NAME = os.environ.get("GKE_CLUSTER_NAME", "")
-GKE_LOCATION = os.environ.get("GKE_LOCATION", "")
-GKE_NAMESPACE = os.environ.get("GKE_NAMESPACE", "demo")
 
 app = BedrockAgentCoreApp()
 
@@ -133,55 +127,6 @@ def upload_report_to_s3(key: str, report: str) -> str:
     return f"Uploaded report to s3://{ARTIFACT_BUCKET}/{key}"
 
 
-# ── Cloud Logging MCP (GKE app panics without talking to kube-apiserver) ─
-
-
-def _since_rfc3339(hours: int = 1) -> str:
-    start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
-    return start.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _default_gke_filter(namespace: str | None = None, extra: str = "") -> str:
-    clauses = [
-        'resource.type="k8s_container"',
-        f'timestamp>="{_since_rfc3339(1)}"',
-    ]
-    if GKE_CLUSTER_NAME:
-        clauses.append(f'resource.labels.cluster_name="{GKE_CLUSTER_NAME}"')
-    if GKE_LOCATION:
-        clauses.append(f'resource.labels.location="{GKE_LOCATION}"')
-    ns = namespace or GKE_NAMESPACE
-    if ns:
-        clauses.append(f'resource.labels.namespace_name="{ns}"')
-    if extra:
-        clauses.append(f"({extra})")
-    return " AND ".join(clauses)
-
-
-@tool
-def list_gcp_log_names() -> str:
-    """List Cloud Logging log names in the configured GCP project (Logging MCP). Useful to see whether k8s_container / k8s_cluster logs exist."""
-    return gcp_mcp.list_log_names(project_id=gcp_auth.gcp_project_id())
-
-
-@tool
-def list_gcp_log_entries(filter: str = "", page_size: int = 20) -> str:
-    """Search Cloud Logging via the Logging remote MCP server (https://logging.googleapis.com/mcp). Does not call the Kubernetes API, so GKE authorized networks do not apply.
-
-    `filter` is Logging Query Language. If empty, searches k8s_container logs for the configured GKE cluster/namespace over the last hour. Examples:
-    - resource.type="k8s_container" AND resource.labels.namespace_name="demo" AND severity>=ERROR
-    - resource.type="k8s_cluster" AND jsonPayload.reason="BackOff"
-    Always include a timestamp window with an RFC3339 lower bound so queries stay cheap.
-    """
-    log_filter = filter.strip() or _default_gke_filter()
-    page_size = max(1, min(int(page_size), 50))
-    return gcp_mcp.list_log_entries(
-        project_id=gcp_auth.gcp_project_id(),
-        filter=log_filter,
-        page_size=page_size,
-    )
-
-
 # ── Limited-write tools ──────────────────────────────────────────────────
 
 
@@ -201,7 +146,7 @@ def delete_pod(name: str, namespace: str = "default") -> str:
     return f"Deleted pod '{name}' in namespace '{namespace}'."
 
 
-EKS_TOOLS = [
+TOOLS = [
     list_pods,
     describe_pod,
     get_pod_logs,
@@ -209,46 +154,23 @@ EKS_TOOLS = [
     list_deployments,
     restart_deployment,
     delete_pod,
+    fetch_input_from_s3,
+    upload_report_to_s3,
 ]
-GCP_LOGGING_TOOLS = [list_gcp_log_names, list_gcp_log_entries]
-S3_TOOLS = [fetch_input_from_s3, upload_report_to_s3]
 
-TOOLS = list(S3_TOOLS)
-if GCP_PROJECT_ID:
-    TOOLS = GCP_LOGGING_TOOLS + TOOLS
-if CLUSTER_NAME:
-    TOOLS = EKS_TOOLS + TOOLS
-
-
-def _system_message() -> str:
-    parts = [
-        "You're an SRE assistant. If the user references an incident ticket or "
-        "S3 key, fetch it first with fetch_input_from_s3. Quote actual log/event "
-        "text as evidence. When done, upload a report with upload_report_to_s3 "
-        "under reports/<workload>-<UTC timestamp>.md."
-    ]
-    if GCP_PROJECT_ID:
-        parts.append(
-            "GKE investigation is Cloud Logging MCP only (list_gcp_log_names, "
-            "list_gcp_log_entries) — you cannot reach the Kubernetes API. "
-            f"GCP project={GCP_PROJECT_ID}"
-            + (f" cluster={GKE_CLUSTER_NAME}" if GKE_CLUSTER_NAME else "")
-            + (f" location={GKE_LOCATION}" if GKE_LOCATION else "")
-            + f" default_namespace={GKE_NAMESPACE}. "
-            "Use Logging Query Language. Prefer resource.type=\"k8s_container\" "
-            "for app panics and resource.type=\"k8s_cluster\" for cluster events. "
-            "Always constrain timestamp with an RFC3339 lower bound "
-            '(e.g. timestamp>="2026-01-01T00:00:00Z").'
-        )
-    if CLUSTER_NAME:
-        parts.append(
-            f"EKS cluster '{CLUSTER_NAME}' is available via Kubernetes API tools. "
-            "Prefer read-only investigation before restart_deployment or delete_pod."
-        )
-    return " ".join(parts)
-
-
-SYSTEM_MESSAGE = _system_message()
+SYSTEM_MESSAGE = (
+    "You're an SRE assistant investigating issues on a real EKS cluster "
+    f"('{CLUSTER_NAME}') via Kubernetes API tools. If the user's request "
+    "references an incident ticket or input file by S3 key, fetch it first "
+    "with fetch_input_from_s3 for context. Prefer read-only investigation "
+    "(list_pods, describe_pod, get_pod_logs, list_events, list_deployments) "
+    "to find the root cause before taking any write action "
+    "(restart_deployment, delete_pod). Quote the actual log/event messages "
+    "you found as evidence for your diagnosis. Once you've reached a "
+    "conclusion, write a troubleshooting report (symptoms, root cause, "
+    "evidence, actions taken) and upload it with upload_report_to_s3 under "
+    "a key like 'reports/<namespace>-<workload>-<UTC timestamp>.md'."
+)
 
 
 def create_agent():

@@ -4,5 +4,3 @@ langchain-core>=0.3.0
 boto3>=1.40.0
 bedrock-agentcore>=0.1.0
 kubernetes>=30.0.0
-google-auth>=2.27.0
-requests>=2.32.0

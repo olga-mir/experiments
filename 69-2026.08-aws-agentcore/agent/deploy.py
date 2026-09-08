@@ -1,10 +1,25 @@
 """
-Deploy the SRE LangGraph agent to AgentCore Runtime using direct code
-deployment (no Docker/ECR needed).
+Deploy the EKS-troubleshooting LangGraph agent to AgentCore Runtime using
+direct code deployment (no Docker/ECR needed).
 
-Set CLUSTER_NAME for EKS Kubernetes tools, GCP_PROJECT_ID + WIF env for
-Cloud Logging MCP (GKE app panics without hitting kube-apiserver). At least
-one of the two is required. See GCP_SETUP.md.
+Adapted from the awslabs agentcore-samples reference:
+01-features/02-host-your-agent/01-runtime/01-hosting-agents/01-http-protocol/02-langgraph-bedrock
+
+Steps:
+1. Create an IAM execution role with AgentCore permissions + eks:DescribeCluster
+2. Install arm64 dependencies with uv, zip with agent code, upload to S3
+3. Create an AgentCore Runtime with codeConfiguration + CLUSTER_NAME/AWS_REGION/ARTIFACT_BUCKET env vars
+4. Wait for READY, create endpoint, save config
+
+Prerequisites:
+    - uv installed
+    - AWS CLI configured with credentials
+    - CLUSTER_NAME env var set to an existing, reachable EKS cluster
+    - `task grant-access` already run so this role can be granted RBAC access
+      once it exists (see Taskfile)
+
+Usage:
+    CLUSTER_NAME=my-cluster python deploy.py
 """
 
 import json
@@ -24,28 +39,9 @@ PROTOCOL = "HTTP"
 PYTHON_RUNTIME = "PYTHON_3_13"
 ENTRY_POINT = "agent.py"
 
-AGENT_FILES = ["agent.py", "eks_auth.py", "gcp_auth.py", "gcp_mcp.py"]
+AGENT_FILES = ["agent.py", "eks_auth.py"]
 
-CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "")
-GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "")
-GCP_PROJECT_NUMBER = os.environ.get("GCP_PROJECT_NUMBER", "")
-GCP_WIF_POOL_ID = os.environ.get("GCP_WIF_POOL_ID", "")
-GCP_WIF_PROVIDER_ID = os.environ.get("GCP_WIF_PROVIDER_ID", "")
-GCP_WIF_SA_EMAIL = os.environ.get("GCP_WIF_SA_EMAIL", "")
-GKE_CLUSTER_NAME = os.environ.get("GKE_CLUSTER_NAME", "")
-GKE_LOCATION = os.environ.get("GKE_LOCATION", "")
-GKE_NAMESPACE = os.environ.get("GKE_NAMESPACE", "demo")
-
-if not CLUSTER_NAME and not GCP_PROJECT_ID:
-    sys.exit("Set CLUSTER_NAME (EKS tools) and/or GCP_PROJECT_ID (Cloud Logging MCP)")
-
-if GCP_PROJECT_ID and not all(
-    (GCP_PROJECT_NUMBER, GCP_WIF_POOL_ID, GCP_WIF_PROVIDER_ID, GCP_WIF_SA_EMAIL)
-):
-    sys.exit(
-        "GCP_PROJECT_ID is set; also set GCP_PROJECT_NUMBER, GCP_WIF_POOL_ID, "
-        "GCP_WIF_PROVIDER_ID, GCP_WIF_SA_EMAIL (see GCP_SETUP.md)"
-    )
+CLUSTER_NAME = os.environ["CLUSTER_NAME"]
 
 # ── AWS Setup ────────────────────────────────────────────────────────────────
 
@@ -55,20 +51,12 @@ ACCOUNT_ID = session.client("sts").get_caller_identity()["Account"]
 S3_BUCKET = f"agentcore-code-{ACCOUNT_ID}-{REGION}"
 S3_PREFIX = f"{AGENT_NAME}/code.zip"
 ARTIFACT_BUCKET = f"agentcore-artifacts-{ACCOUNT_ID}-{REGION}"
-CLUSTER_ARN = (
-    f"arn:aws:eks:{REGION}:{ACCOUNT_ID}:cluster/{CLUSTER_NAME}" if CLUSTER_NAME else ""
-)
+CLUSTER_ARN = f"arn:aws:eks:{REGION}:{ACCOUNT_ID}:cluster/{CLUSTER_NAME}"
 
 print(f"Region:     {REGION}")
 print(f"Account:    {ACCOUNT_ID}")
 print(f"Agent:      {AGENT_NAME}")
-print(f"EKS:        {CLUSTER_ARN or '(disabled)'}")
-if GCP_PROJECT_ID:
-    print(f"GCP:        {GCP_PROJECT_ID}  SA={GCP_WIF_SA_EMAIL}")
-    if GKE_CLUSTER_NAME:
-        print(f"GKE:        {GKE_CLUSTER_NAME} loc={GKE_LOCATION} ns={GKE_NAMESPACE}")
-else:
-    print("GCP:        (Logging MCP disabled)")
+print(f"Cluster:    {CLUSTER_ARN}")
 
 
 # ── Step 1: Create IAM Execution Role ────────────────────────────────────────
@@ -145,6 +133,12 @@ def create_execution_role() -> str:
                 ],
             },
             {
+                "Sid": "EksDescribeCluster",
+                "Effect": "Allow",
+                "Action": "eks:DescribeCluster",
+                "Resource": CLUSTER_ARN,
+            },
+            {
                 "Sid": "ArtifactBucketReadWrite",
                 "Effect": "Allow",
                 "Action": ["s3:GetObject", "s3:PutObject"],
@@ -152,15 +146,6 @@ def create_execution_role() -> str:
             },
         ],
     }
-    if CLUSTER_ARN:
-        inline_policy["Statement"].append(
-            {
-                "Sid": "EksDescribeCluster",
-                "Effect": "Allow",
-                "Action": "eks:DescribeCluster",
-                "Resource": CLUSTER_ARN,
-            }
-        )
 
     try:
         resp = iam.create_role(
@@ -273,41 +258,6 @@ def create_artifact_bucket():
         print(f"\n✓ S3 artifact bucket exists: {ARTIFACT_BUCKET}")
 
 
-def runtime_environment_variables() -> dict[str, str]:
-    env = {
-        "AWS_REGION": REGION,
-        "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
-    }
-    if CLUSTER_NAME:
-        env["CLUSTER_NAME"] = CLUSTER_NAME
-    if GCP_PROJECT_ID:
-        env.update(
-            {
-                "GCP_PROJECT_ID": GCP_PROJECT_ID,
-                "GCP_PROJECT_NUMBER": GCP_PROJECT_NUMBER,
-                "GCP_WIF_POOL_ID": GCP_WIF_POOL_ID,
-                "GCP_WIF_PROVIDER_ID": GCP_WIF_PROVIDER_ID,
-                "GCP_WIF_SA_EMAIL": GCP_WIF_SA_EMAIL,
-            }
-        )
-        if GKE_CLUSTER_NAME:
-            env["GKE_CLUSTER_NAME"] = GKE_CLUSTER_NAME
-        if GKE_LOCATION:
-            env["GKE_LOCATION"] = GKE_LOCATION
-        if GKE_NAMESPACE:
-            env["GKE_NAMESPACE"] = GKE_NAMESPACE
-    return env
-
-
-def runtime_description() -> str:
-    bits = []
-    if GCP_PROJECT_ID:
-        bits.append("GKE via Cloud Logging MCP")
-    if CLUSTER_NAME:
-        bits.append("EKS Kubernetes API")
-    return "LangGraph SRE agent: " + " + ".join(bits) if bits else "LangGraph SRE agent"
-
-
 # ── Step 3: Create AgentCore Runtime ─────────────────────────────────────────
 
 
@@ -338,8 +288,12 @@ def create_runtime(role_arn: str) -> dict:
             roleArn=role_arn,
             networkConfiguration={"networkMode": "PUBLIC"},
             protocolConfiguration={"serverProtocol": PROTOCOL},
-            environmentVariables=runtime_environment_variables(),
-            description=runtime_description(),
+            environmentVariables={
+                "CLUSTER_NAME": CLUSTER_NAME,
+                "AWS_REGION": REGION,
+                "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
+            },
+            description="LangGraph SRE agent troubleshooting a real EKS cluster",
         )
         runtime_id = existing_runtime_id
         runtime_arn = response.get("agentRuntimeArn") or f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/{runtime_id}"
@@ -357,8 +311,12 @@ def create_runtime(role_arn: str) -> dict:
             roleArn=role_arn,
             networkConfiguration={"networkMode": "PUBLIC"},
             protocolConfiguration={"serverProtocol": PROTOCOL},
-            environmentVariables=runtime_environment_variables(),
-            description=runtime_description(),
+            environmentVariables={
+                "CLUSTER_NAME": CLUSTER_NAME,
+                "AWS_REGION": REGION,
+                "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
+            },
+            description="LangGraph SRE agent troubleshooting a real EKS cluster",
         )
         runtime_id = response["agentRuntimeId"]
         runtime_arn = response["agentRuntimeArn"]
@@ -456,9 +414,6 @@ def main():
         "region": REGION,
         "role_arn": role_arn,
         "cluster_name": CLUSTER_NAME,
-        "gcp_project_id": GCP_PROJECT_ID,
-        "gke_cluster_name": GKE_CLUSTER_NAME,
-        "gke_namespace": GKE_NAMESPACE,
         "artifact_bucket": ARTIFACT_BUCKET,
     }
     with open("runtime_config.json", "w") as f:
@@ -467,15 +422,10 @@ def main():
     print("\n" + "=" * 60)
     print("✓ Deployment complete!")
     print(f"  Runtime ARN: {runtime['runtime_arn']}")
-    print(f"  Role ARN:    {role_arn}")
     print("  Config saved to: runtime_config.json")
-    if CLUSTER_NAME:
-        print("\n  EKS: grant this role RBAC before invoking:")
-        print(f"    task grant-access AGENT_ROLE_ARN={role_arn}")
-    if GCP_PROJECT_ID:
-        print("\n  GCP: WIF must trust this role (GCP_SETUP.md). Probe:")
-        print("    task probe-gcp-logs")
-        print('    task invoke -- "Find CrashLoopBackOff evidence in Cloud Logging for the demo namespace"')
+    print(f"\n  IMPORTANT: grant this role RBAC access before invoking:")
+    print(f"    task grant-access AGENT_ROLE_ARN={role_arn}")
+    print("\n  Test with: python invoke.py")
     print("=" * 60)
 
 
