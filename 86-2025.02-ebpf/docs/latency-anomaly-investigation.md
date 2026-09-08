@@ -37,6 +37,21 @@ cannot distinguish those cases.
 - Add a small side-channel (a "max raw value seen" per hist-key, or a ring buffer for
   outlier events) that captures the true magnitude instead of clamping it.
 
+**Implemented (branch `86-ebpf/track-a-cpu-rerun`):**
+- `runqCollector.Collect` in `main.go` no longer folds BPF overflow bucket 23 into the
+  finite `le=8.388608s` Prometheus bucket. Overflow events now count only toward the
+  histogram `_count` (the implicit `le="+Inf"` bucket); every finite `le` holds bounded
+  observations only. A p99 that ranks past the last finite bucket resolves to the edge of
+  the unbounded region (`+Inf`, or ≈8.39s depending on the PromQL engine) instead of a
+  fabricated ~8.3s.
+- Raw-max side channel: new BPF `BPF_MAP_TYPE_ARRAY` map `runq_lat_max` (1×`u64`),
+  `__sync`-CAS max of `runq_lat` in `tp_sched_switch`, exported by `debug.go` as gauge
+  **`ebpf_runq_latency_max_nanoseconds`**. (Needs `go generate ./...` via `task lima-build-image`.)
+- **What to watch next run:** if `histogram_quantile(0.99, ...)` returns `+Inf`/`NaN` or
+  pins to 8.388608s while `ebpf_runq_latency_max_nanoseconds` reads e.g. 40s, the histogram
+  was clamping — quote the raw-max value, not the p99, and check whether the raw-max is itself
+  a leak artefact (section 4) before trusting it.
+
 ## 2. Ruled out: CFS bandwidth throttling
 
 Checked `container_cpu_cfs_throttled_periods_total` (Max, grouped by pod) in Metrics
@@ -63,6 +78,16 @@ config for `node_cpu_seconds_total` (via node_exporter or the GKE Managed Promet
 node-level collector) if it isn't already, then re-run the load test and check steal time
 for the exact window against the anomalous latency events.
 
+**Implemented (branch `86-ebpf/track-a-cpu-rerun`):**
+- `k8s/node-exporter.yaml` — `prometheus/node-exporter` DaemonSet (namespace `test-ebpf`,
+  scoped to `workload=noisy-node` + `dedicated=noisy-node:NoSchedule`, `hostNetwork`/`hostPID`,
+  host `/proc` `/sys` `/` mounts) plus a `PodMonitoring` selecting it.
+- Deploy with **`task deploy-node-exporter`** (`kubectl apply -f k8s/node-exporter.yaml`).
+- **Check query:** `rate(node_cpu_seconds_total{mode="steal"}[5m])`.
+- **What "steal confirmed" looks like:** a non-trivial `mode="steal"` rate (say >0.02 =
+  ~2% of a core) on the test node during the exact window of the high-latency events. Flat
+  ~0 across the window rules steal time out as the mechanism.
+
 ## 4. Leading suspect: orphaned entries in `runq_enqueued` (PID reuse)
 
 The `runq_enqueued` BPF hash map has no expiry and no cleanup path other than the delete
@@ -87,6 +112,23 @@ entries with old stale timestamps confirms the leak.
 
 **Fix, if confirmed:** key on PID + task start-time (not PID alone) to prevent recycled-PID
 collisions, or hook `sched_process_exit` to clean up orphaned entries proactively.
+
+**Implemented (branch `86-ebpf/track-a-cpu-rerun`):**
+- `debug.go` — a goroutine (`watchRunqEnqueued`, wired from `main()` with one line:
+  `go watchRunqEnqueued(&objs)`) walks `objs.RunqEnqueued` every 5s and exports gauges
+  **`ebpf_runq_enqueued_entries`**, **`ebpf_runq_enqueued_max_age_seconds`**, and
+  **`ebpf_runq_enqueued_stale_entries`** (entries older than `staleAgeThreshold = 10s`),
+  computing age against `CLOCK_MONOTONIC` — the same clock as `bpf_ktime_get_ns`. It also
+  logs a one-line summary each tick, visible in `kubectl logs`.
+- `dump-runq-enqueued.sh` + **`task dump-runq-enqueued`** — shells into the `bpftool`
+  DaemonSet pod on the test node and runs `bpftool map dump name runq_enqueued` /
+  `runq_histograms` for manual inspection.
+- **What "leak confirmed" looks like:** `ebpf_runq_enqueued_entries` climbs steadily
+  through the run and never drops back; `ebpf_runq_enqueued_stale_entries` goes and stays
+  non-zero; `ebpf_runq_enqueued_max_age_seconds` grows without bound (tens/hundreds of
+  seconds). In the raw dump, a tail of entries whose `u64` timestamps are many seconds
+  behind `/proc/uptime`. If confirmed, the 8.3s figure is an orphan+PID-reuse artefact and
+  the histogram/steal-time findings are moot for this run.
 
 ## Priority order for next test run
 

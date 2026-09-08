@@ -95,6 +95,11 @@ tasks:
     cmds:
       - kubectl apply -f k8s/pod-monitoring.yaml
 
+  deploy-node-exporter:
+    desc: Deploy node-exporter DaemonSet + PodMonitoring to scrape node_cpu_seconds_total{mode="steal"} on the noisy-node pool
+    cmds:
+      - kubectl apply -f k8s/node-exporter.yaml
+
   list-pod-cgroups:
     desc: List pods grouped by node with their eBPF metric cgroup label (pod/UID/CID)
     cmds:
@@ -104,6 +109,11 @@ tasks:
     desc: Deploy ballast DaemonSet — pins 1 exclusive core per test node (needs static CPU Manager)
     cmds:
       - kubectl apply -f k8s/ballast.yaml
+
+  dump-runq-enqueued:
+    desc: Dump runq_enqueued + runq_histograms BPF maps from the bpftool pod on the test node (manual leak check, investigation section 4)
+    cmds:
+      - ./dump-runq-enqueued.sh
 
   deploy-victim:
     desc: Deploy victim-api test workload to noisy-node pool

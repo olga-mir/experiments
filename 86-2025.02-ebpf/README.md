@@ -165,7 +165,7 @@ kubectl get pod <name> -o jsonpath='{.metadata.uid}' | cut -c1-8
 ```
 
 Key metrics:
-- `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s.
+- `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s. The overflow bucket (≥8.388608s) is now represented only in `_count` / the implicit `le="+Inf"` bucket — no fabricated finite ceiling; a `_count` vs last finite `_bucket` gap means "real ceiling unknown".
 - `ebpf_events_total` — confirms data is flowing from the eBPF ring buffer.
 
 Dashboard panels use `histogram_quantile` over PromQL — not the raw histogram aggregation — to get accurate p50/p99 percentiles. Example noisy-neighbour query (who is preempting pod X?):
@@ -177,6 +177,28 @@ histogram_quantile(
   )
 ) / 1e6
 ```
+
+## Latency-anomaly instrumentation (branch `86-ebpf/track-a-cpu-rerun`)
+
+Added to make the next CPU re-run's "8.3s p99" measurement trustworthy — see
+[`docs/latency-anomaly-investigation.md`](docs/latency-anomaly-investigation.md).
+
+Extra metrics exported by the eBPF DaemonSet:
+- `ebpf_runq_enqueued_entries` — live size of the `runq_enqueued` BPF map.
+- `ebpf_runq_enqueued_max_age_seconds` — age of the oldest entry (CLOCK_MONOTONIC).
+- `ebpf_runq_enqueued_stale_entries` — entries older than 10s (orphan/PID-reuse leak signal).
+- `ebpf_runq_latency_max_nanoseconds` — true max run-queue latency seen, unclamped by the histogram overflow bucket (needs `go generate` — runs inside `task lima-build-image`).
+
+The DaemonSet also logs a `runq_enqueued probe: entries=… max_age=… stale=… raw_max=…` line every 5s (`kubectl logs`).
+
+Tasks:
+- `task deploy-node-exporter` — node-exporter DaemonSet + PodMonitoring on the noisy-node pool, to scrape node-level CPU including steal time. Check query: `rate(node_cpu_seconds_total{mode="steal"}[5m])`.
+- `task dump-runq-enqueued` — dump `runq_enqueued` / `runq_histograms` from the `bpftool` pod on the test node for the manual §4 leak check.
+
+What to watch during the run:
+- **Leak (§4):** `ebpf_runq_enqueued_entries` / `_stale_entries` climb and never recover, `_max_age_seconds` grows without bound → the 8.3s figure is an orphan+PID-reuse artefact.
+- **Histogram clamp (§1):** p99 pins to 8.388608s / `+Inf` while `ebpf_runq_latency_max_nanoseconds` shows the real magnitude.
+- **Steal time (§3):** non-trivial `node_cpu_seconds_total{mode="steal"}` rate on the test node during the anomalous window.
 
 ## Outcomes
 
