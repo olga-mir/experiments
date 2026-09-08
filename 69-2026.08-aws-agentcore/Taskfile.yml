@@ -3,19 +3,67 @@ version: '3'
 vars:
   # Resolved lazily (empty if unset) rather than failing here - a "vars:" sh
   # script runs for every task regardless of whether that task needs it, so
-  # enforcement happens in the "preflight" task instead, which only tasks
-  # that actually need CLUSTER_NAME depend on.
+  # enforcement happens in the "preflight" / "preflight-eks" tasks instead.
   CLUSTER_NAME:
     sh: echo "${CLUSTER_NAME:-}"
   AWS_REGION:
     sh: echo "${AWS_REGION:-$(aws configure get region)}"
+  GCP_PROJECT_ID:
+    sh: echo "${GCP_PROJECT_ID:-}"
+  GCP_PROJECT_NUMBER:
+    sh: echo "${GCP_PROJECT_NUMBER:-}"
+  GCP_WIF_POOL_ID:
+    sh: echo "${GCP_WIF_POOL_ID:-}"
+  GCP_WIF_PROVIDER_ID:
+    sh: echo "${GCP_WIF_PROVIDER_ID:-}"
+  GCP_WIF_SA_EMAIL:
+    sh: echo "${GCP_WIF_SA_EMAIL:-}"
+  GKE_CLUSTER_NAME:
+    sh: echo "${GKE_CLUSTER_NAME:-}"
+  GKE_LOCATION:
+    sh: echo "${GKE_LOCATION:-}"
+  GKE_NAMESPACE:
+    sh: echo "${GKE_NAMESPACE:-demo}"
 
 env:
   AWS_REGION: "{{.AWS_REGION}}"
 
 tasks:
   preflight:
-    desc: Validate required environment variables
+    desc: Validate env for AgentCore deploy (EKS and/or GCP Logging MCP)
+    cmds:
+      - |
+        if [ -z "{{.AWS_REGION}}" ]; then
+          echo "WARNING: AWS_REGION not set and no default region configured (aws configure get region)"
+        else
+          echo "AWS_REGION={{.AWS_REGION}}"
+        fi
+      - |
+        if [ -z "{{.CLUSTER_NAME}}" ] && [ -z "{{.GCP_PROJECT_ID}}" ]; then
+          echo "ERROR: set CLUSTER_NAME (EKS) and/or GCP_PROJECT_ID (Cloud Logging MCP)" >&2
+          exit 1
+        fi
+        if [ -n "{{.CLUSTER_NAME}}" ]; then
+          echo "CLUSTER_NAME={{.CLUSTER_NAME}}"
+        fi
+      - |
+        if [ -n "{{.GCP_PROJECT_ID}}" ]; then
+          missing=""
+          [ -z "{{.GCP_PROJECT_NUMBER}}" ] && missing="$missing GCP_PROJECT_NUMBER"
+          [ -z "{{.GCP_WIF_POOL_ID}}" ] && missing="$missing GCP_WIF_POOL_ID"
+          [ -z "{{.GCP_WIF_PROVIDER_ID}}" ] && missing="$missing GCP_WIF_PROVIDER_ID"
+          [ -z "{{.GCP_WIF_SA_EMAIL}}" ] && missing="$missing GCP_WIF_SA_EMAIL"
+          if [ -n "$missing" ]; then
+            echo "ERROR: GCP_PROJECT_ID is set; also set:$missing (see GCP_SETUP.md)" >&2
+            exit 1
+          fi
+          echo "GCP_PROJECT_ID={{.GCP_PROJECT_ID}}"
+          echo "GCP_WIF_SA_EMAIL={{.GCP_WIF_SA_EMAIL}}"
+          echo "GKE_CLUSTER_NAME={{.GKE_CLUSTER_NAME}} GKE_LOCATION={{.GKE_LOCATION}} GKE_NAMESPACE={{.GKE_NAMESPACE}}"
+        fi
+
+  preflight-eks:
+    desc: Require CLUSTER_NAME (EKS-only tasks)
     cmds:
       - |
         if [ -z "{{.CLUSTER_NAME}}" ]; then
@@ -23,16 +71,10 @@ tasks:
           exit 1
         fi
         echo "CLUSTER_NAME={{.CLUSTER_NAME}}"
-      - |
-        if [ -z "{{.AWS_REGION}}" ]; then
-          echo "WARNING: AWS_REGION not set and no default region configured (aws configure get region)"
-        else
-          echo "AWS_REGION={{.AWS_REGION}}"
-        fi
 
   cluster-up:
     desc: Create the Fargate-only EKS cluster (takes ~15 min)
-    deps: [preflight]
+    deps: [preflight-eks]
     env:
       CLUSTER_NAME: "{{.CLUSTER_NAME}}"
     cmds:
@@ -41,20 +83,18 @@ tasks:
 
   cluster-down:
     desc: Delete the EKS cluster (stops the ~$0.10/hr control-plane charge)
-    deps: [preflight]
+    deps: [preflight-eks]
     cmds:
       - eksctl delete cluster --name {{.CLUSTER_NAME}} --region {{.AWS_REGION}}
 
   seed-broken-app:
-    desc: Deploy the deliberately crash-looping demo workload
-    deps: [preflight]
+    desc: Deploy the deliberately crash-looping demo workload (current kubecontext)
     cmds:
       - kubectl apply -f broken-app/crashloop-app.yaml
       - 'echo "Wait ~30s then check: kubectl get pods -n demo"'
 
   seed-input:
     desc: Upload a sample incident ticket to the agent's S3 artifact bucket
-    deps: [preflight]
     cmds:
       - >
         printf '%s\n' "Incident: payments-worker pods in the demo namespace are crash-looping. Reported by on-call. Please investigate root cause."
@@ -62,8 +102,8 @@ tasks:
       - 'echo "Try: task invoke -- \"Fetch input/ticket.txt from S3 and investigate the reported issue, then upload your report\""'
 
   grant-access:
-    desc: "Map the AgentCore execution role to scoped RBAC (usage: task grant-access AGENT_ROLE_ARN=arn:aws:iam::...:role/...)"
-    deps: [preflight]
+    desc: "Map the AgentCore execution role to scoped EKS RBAC (usage: task grant-access AGENT_ROLE_ARN=arn:aws:iam::...:role/...)"
+    deps: [preflight-eks]
     preconditions:
       - sh: '[ -n "{{.AGENT_ROLE_ARN}}" ]'
         msg: "AGENT_ROLE_ARN is required, e.g. task grant-access AGENT_ROLE_ARN=$(jq -r .role_arn agent/runtime_config.json)"
@@ -81,8 +121,38 @@ tasks:
     desc: Deploy the LangGraph agent to AgentCore Runtime (direct code deploy)
     deps: [preflight]
     dir: agent
+    env:
+      CLUSTER_NAME: "{{.CLUSTER_NAME}}"
+      GCP_PROJECT_ID: "{{.GCP_PROJECT_ID}}"
+      GCP_PROJECT_NUMBER: "{{.GCP_PROJECT_NUMBER}}"
+      GCP_WIF_POOL_ID: "{{.GCP_WIF_POOL_ID}}"
+      GCP_WIF_PROVIDER_ID: "{{.GCP_WIF_PROVIDER_ID}}"
+      GCP_WIF_SA_EMAIL: "{{.GCP_WIF_SA_EMAIL}}"
+      GKE_CLUSTER_NAME: "{{.GKE_CLUSTER_NAME}}"
+      GKE_LOCATION: "{{.GKE_LOCATION}}"
+      GKE_NAMESPACE: "{{.GKE_NAMESPACE}}"
     cmds:
       - uv run --with-requirements requirements.txt python deploy.py
+
+  probe-gcp-logs:
+    desc: Call Cloud Logging MCP once (ADC locally, or WIF if GCP_WIF_* is set)
+    dir: agent
+    env:
+      GCP_PROJECT_ID: "{{.GCP_PROJECT_ID}}"
+      GCP_PROJECT_NUMBER: "{{.GCP_PROJECT_NUMBER}}"
+      GCP_WIF_POOL_ID: "{{.GCP_WIF_POOL_ID}}"
+      GCP_WIF_PROVIDER_ID: "{{.GCP_WIF_PROVIDER_ID}}"
+      GCP_WIF_SA_EMAIL: "{{.GCP_WIF_SA_EMAIL}}"
+      GKE_CLUSTER_NAME: "{{.GKE_CLUSTER_NAME}}"
+      GKE_LOCATION: "{{.GKE_LOCATION}}"
+      GKE_NAMESPACE: "{{.GKE_NAMESPACE}}"
+    cmds:
+      - |
+        if [ -z "{{.GCP_PROJECT_ID}}" ]; then
+          echo "ERROR: GCP_PROJECT_ID is required" >&2
+          exit 1
+        fi
+      - uv run --with-requirements requirements.txt python probe_logging_mcp.py {{.CLI_ARGS}}
 
   invoke:
     desc: "Invoke the deployed agent (usage: task invoke -- \"your prompt\")"
@@ -91,7 +161,7 @@ tasks:
       - uv run --with-requirements requirements.txt python invoke.py {{.CLI_ARGS}}
 
   cleanup-agent:
-    desc: Delete the AgentCore runtime, IAM role, and S3 artifacts (leaves the cluster alone)
+    desc: Delete the AgentCore runtime, IAM role, and S3 artifacts (leaves clusters alone)
     dir: agent
     cmds:
       - uv run --with-requirements requirements.txt python cleanup.py

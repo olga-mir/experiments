@@ -39,11 +39,25 @@ def invoke(runtime_arn: str, prompt: str, region: str) -> str:
 def main():
     config = load_config()
 
-    prompt = (
-        " ".join(sys.argv[1:])
-        if len(sys.argv) > 1
-        else f"Investigate the demo namespace on the {config['cluster_name']} cluster - something looks broken. Find the root cause."
-    )
+    prompt = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else ""
+    if not prompt:
+        gcp = config.get("gcp_project_id")
+        gke = config.get("gke_cluster_name") or "the GKE cluster"
+        ns = config.get("gke_namespace") or "demo"
+        eks = config.get("cluster_name")
+        if gcp:
+            prompt = (
+                f"Investigate {gke} via Cloud Logging. Look in namespace '{ns}' "
+                "for CrashLoopBackOff or application panics in the last hour. "
+                "Quote log lines as evidence, then upload a report to S3."
+            )
+        elif eks:
+            prompt = (
+                f"Investigate the demo namespace on the {eks} cluster - something "
+                "looks broken. Find the root cause."
+            )
+        else:
+            prompt = "Investigate the reported issue and write a report."
 
     print(f"Invoking agent: {config['runtime_arn']}\n")
     print(f"─── Prompt: {prompt}")
