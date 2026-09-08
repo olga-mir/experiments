@@ -100,6 +100,11 @@ tasks:
     cmds:
       - ./list-cgroup-labels.sh
 
+  deploy-ballast:
+    desc: Deploy ballast DaemonSet — pins 1 exclusive core per test node (needs static CPU Manager)
+    cmds:
+      - kubectl apply -f k8s/ballast.yaml
+
   deploy-victim:
     desc: Deploy victim-api test workload to noisy-node pool
     cmds:

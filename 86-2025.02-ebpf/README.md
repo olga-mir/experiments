@@ -72,6 +72,53 @@ task deploy-monitoring  # deploys pod-monitoring.yaml
 
 When this is proved working, this can be integrated into the playground projects.
 
+## Confine the experiment to one CPU (static CPU Manager + ballast)
+
+The `test-pool` node pool (`e2-standard-2` = 2 vCPU) is created with kubelet
+`cpuManagerPolicy: static` via `--system-config-from-file` — see
+[`gke-node-system-config.yaml`](./gke-node-system-config.yaml), wired into
+[`provision.sh`](./provision.sh). Under the static policy, a **Guaranteed-QoS**
+pod that requests an **integer** number of CPUs is handed those cores
+*exclusively*; they leave the shared pool that every other pod runs in.
+
+[`k8s/ballast.yaml`](./k8s/ballast.yaml) is a do-nothing `pause` DaemonSet
+requesting exactly `cpu: "1"` (request == limit for cpu and memory → Guaranteed).
+It parks one whole core per node, leaving `bully-hog`, `victim-api`, the eBPF
+collector and the kube-system DaemonSets to contend over the **one remaining
+core**.
+
+```bash
+task deploy-ballast          # or: kubectl apply -f k8s/ballast.yaml
+```
+
+Deploy it *before* the experiment workloads so the core is fenced off first.
+
+### Verify the core was actually pinned
+
+```bash
+# QoS class must be Guaranteed
+kubectl get pod -l app=ballast -o jsonpath='{.items[0].status.qosClass}{"\n"}'
+
+# kubelet CPU-manager state on the test node: defaultCpuSet (the shared pool)
+# should collapse to a single CPU id; the ballast container maps to the other.
+TEST_NODE=$(kubectl get pod -l app=ballast -o jsonpath='{.items[0].spec.nodeName}')
+kubectl debug node/"$TEST_NODE" -it --image=busybox -- \
+  cat /host/var/lib/kubelet/cpu_manager_state
+```
+
+Expected shape on `e2-standard-2`:
+
+```json
+{
+  "policyName": "static",
+  "defaultCpuSet": "0",
+  "entries": { "<ballast-pod-uid>": { "ballast": "1" } }
+}
+```
+
+If you change the node machine type, set the ballast `cpu` request to
+`(node vCPUs − 1)` to keep the experiment on a single core.
+
 ## Generate load to create noisy neighbor pressure
 
 ### Option A — self-contained cpu-stressor DaemonSet (quickest)
