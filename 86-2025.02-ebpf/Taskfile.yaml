@@ -10,6 +10,28 @@ vars:
   REGION:
     sh: echo "${REGION:?'REGION environment variable is required'}"
   CLUSTER_NAME: "{{.SERVICE_NAME}}-cluster"
+
+  # GKE cluster location — a zone (e.g. australia-southeast1-a) for a zonal
+  # cluster, or a region for a regional one. provision.sh creates a *zonal*
+  # cluster, so this is NOT necessarily REGION (which stays a region for
+  # Artifact Registry). Auto-detected from the live cluster via gcloud; falls
+  # back to REGION when offline / not yet provisioned. Override by exporting
+  # CLUSTER_LOCATION.
+  CLUSTER_LOCATION:
+    sh: >
+      loc="${CLUSTER_LOCATION:-$(gcloud container clusters list
+      --project '{{.PROJECT_ID}}' --filter 'name={{.CLUSTER_NAME}}'
+      --format 'value(location)' 2>/dev/null | head -1)}";
+      echo "${loc:-{{.REGION}}}"
+
+  # Every kubectl call is pinned to an explicit context so tasks never act on
+  # whatever `kubectl config current-context` happens to be. Defaults to the
+  # context name `gcloud container clusters get-credentials` writes for this
+  # cluster (derived from CLUSTER_LOCATION, not REGION); override by exporting
+  # KUBE_CONTEXT (e.g. a renamed context).
+  KUBE_CONTEXT:
+    sh: echo "${KUBE_CONTEXT:-gke_{{.PROJECT_ID}}_{{.CLUSTER_LOCATION}}_{{.CLUSTER_NAME}}}"
+
   GIT_COMMIT:
     sh: git rev-parse --short HEAD
 
@@ -23,7 +45,10 @@ tasks:
       - echo "PROJECT_ID={{.PROJECT_ID}}"
       - echo "REGION={{.REGION}}"
       - echo "CLUSTER_NAME={{.CLUSTER_NAME}}"
+      - echo "CLUSTER_LOCATION={{.CLUSTER_LOCATION}}"
+      - echo "KUBE_CONTEXT={{.KUBE_CONTEXT}}"
       - echo "IMAGE_PATH={{.IMAGE_PATH}}"
+      - 'kubectl config get-contexts {{.KUBE_CONTEXT}} >/dev/null 2>&1 || echo "WARN: kube context {{.KUBE_CONTEXT}} not found — run: gcloud container clusters get-credentials {{.CLUSTER_NAME}} --location {{.CLUSTER_LOCATION}}"'
 
   provision-cluster:
     desc: Provision GKE cluster with gcloud
@@ -33,7 +58,7 @@ tasks:
   delete-cluster:
     desc: Delete GKE cluster
     cmds:
-      - gcloud container clusters delete {{.CLUSTER_NAME}} --region={{.REGION}} --quiet
+      - gcloud container clusters delete {{.CLUSTER_NAME}} --location={{.CLUSTER_LOCATION}} --quiet
 
 
   lima-start:
@@ -88,27 +113,52 @@ tasks:
       FULL_IMAGE_TAG: '{{.IMAGE_PATH}}:latest'
     cmds:
       - >
-        IMAGE={{.FULL_IMAGE_TAG}} envsubst < k8s/ebpf-daemonset.yaml | kubectl apply -f -
+        IMAGE={{.FULL_IMAGE_TAG}} envsubst < k8s/ebpf-daemonset.yaml | kubectl --context {{.KUBE_CONTEXT}} apply -f -
 
   deploy-monitoring:
     desc: Deploy PodMonitoring CRD for GKE Managed Prometheus
     cmds:
-      - kubectl apply -f k8s/pod-monitoring.yaml
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/pod-monitoring.yaml
+
+  deploy-node-exporter:
+    desc: Deploy node-exporter DaemonSet + PodMonitoring to scrape node_cpu_seconds_total{mode="steal"} on the noisy-node pool
+    cmds:
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/node-exporter.yaml
 
   list-pod-cgroups:
     desc: List pods grouped by node with their eBPF metric cgroup label (pod/UID/CID)
     cmds:
-      - ./list-cgroup-labels.sh
+      - KUBE_CONTEXT={{.KUBE_CONTEXT}} ./list-cgroup-labels.sh
+
+  deploy-ballast:
+    desc: Deploy ballast DaemonSet — pins 1 exclusive core per test node (needs static CPU Manager)
+    cmds:
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/ballast.yaml
+
+  dump-runq-enqueued:
+    desc: Dump runq_enqueued + runq_histograms BPF maps from the bpftool pod on the test node (manual leak check, investigation section 4)
+    cmds:
+      - KUBE_CONTEXT={{.KUBE_CONTEXT}} ./dump-runq-enqueued.sh
 
   deploy-victim:
     desc: Deploy victim-api test workload to noisy-node pool
     cmds:
-      - kubectl apply -f k8s/victim-api.yaml
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/victim-api.yaml
 
   deploy-bully:
     desc: Deploy bully-hog CPU stressor to noisy-node pool
     cmds:
-      - kubectl apply -f k8s/bully-hog.yaml
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/bully-hog.yaml
+
+  deploy-bully-io:
+    desc: "Track B: deploy bully-io disk-I/O stressor to noisy-node pool (run alone, not with bully-net)"
+    cmds:
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/bully-io.yaml
+
+  deploy-bully-net:
+    desc: "Track B: deploy bully-net network-I/O stressor to noisy-node pool (run alone, not with bully-io)"
+    cmds:
+      - kubectl --context {{.KUBE_CONTEXT}} apply -f k8s/bully-net.yaml
 
   help:
     desc: Show list of available tasks and their descriptions

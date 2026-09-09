@@ -37,6 +37,12 @@ spec:
         - name: metrics
           containerPort: 9090
           protocol: TCP
+        env:
+        # Node PSI: psi.go reads <PSI_PROC_PATH>/{cpu,io,memory}. Point it at the
+        # host's /proc/pressure, mounted below (the pod's own /proc is the
+        # container's, not the node's).
+        - name: PSI_PROC_PATH
+          value: /host/proc/pressure
         securityContext:
           privileged: true  # Required for eBPF operations
         volumeMounts:
@@ -45,6 +51,9 @@ spec:
         - name: sys-fs-cgroup
           mountPath: /sys/fs/cgroup
           readOnly: true
+        - name: host-proc-pressure
+          mountPath: /host/proc/pressure
+          readOnly: true
       volumes:
       - name: sys-kernel-debug
         hostPath:
@@ -52,3 +61,8 @@ spec:
       - name: sys-fs-cgroup
         hostPath:
           path: /sys/fs/cgroup
+      - name: host-proc-pressure
+        # Requires PSI enabled in the node kernel (CONFIG_PSI=y, psi=1 boot arg).
+        # GKE COS nodes have it on by default.
+        hostPath:
+          path: /proc/pressure

@@ -45,6 +45,15 @@ $ task lima-build-push
 
 This task will push image to GCP GAR and from there it can be deployed to a GKE cluster as described in section below
 
+> **Build depends on Docker Hub, not just GAR.** GAR is only the `--push` target. The
+> [`Dockerfile`](./Dockerfile) pulls its base images — `golang:1.25` and `ubuntu:24.10` —
+> from Docker Hub (`docker.io/library/*`), so a Docker Hub outage or an unreachable
+> `registry-1.docker.io` fails the whole build (`ERROR: ... DeadlineExceeded: context
+> deadline exceeded` on `load metadata for docker.io/library/...`). Seen 2026-09-09 from
+> Docker Desktop. Workarounds: retry, build inside Lima (separate VM/network), or —
+> better — mirror the two base images into Artifact Registry (remote/pull-through repo or
+> `crane cp` the pinned tags) and repoint the `FROM` lines so the build only touches GAR.
+
 # GKE
 
 To explore eBPF on the host direclty is challenging in GKE because (rightfully so) there is no `apt` or `make`. It should be possible to download `bpftool` with `curl` but it would require building it from source to target COS env somehere which is not COS.
@@ -71,6 +80,53 @@ task deploy-monitoring  # deploys pod-monitoring.yaml
 ```
 
 When this is proved working, this can be integrated into the playground projects.
+
+## Confine the experiment to one CPU (static CPU Manager + ballast)
+
+The `test-pool` node pool (`e2-standard-2` = 2 vCPU) is created with kubelet
+`cpuManagerPolicy: static` via `--system-config-from-file` — see
+[`gke-node-system-config.yaml`](./gke-node-system-config.yaml), wired into
+[`provision.sh`](./provision.sh). Under the static policy, a **Guaranteed-QoS**
+pod that requests an **integer** number of CPUs is handed those cores
+*exclusively*; they leave the shared pool that every other pod runs in.
+
+[`k8s/ballast.yaml`](./k8s/ballast.yaml) is a do-nothing `pause` DaemonSet
+requesting exactly `cpu: "1"` (request == limit for cpu and memory → Guaranteed).
+It parks one whole core per node, leaving `bully-hog`, `victim-api`, the eBPF
+collector and the kube-system DaemonSets to contend over the **one remaining
+core**.
+
+```bash
+task deploy-ballast          # or: kubectl apply -f k8s/ballast.yaml
+```
+
+Deploy it *before* the experiment workloads so the core is fenced off first.
+
+### Verify the core was actually pinned
+
+```bash
+# QoS class must be Guaranteed
+kubectl get pod -l app=ballast -o jsonpath='{.items[0].status.qosClass}{"\n"}'
+
+# kubelet CPU-manager state on the test node: defaultCpuSet (the shared pool)
+# should collapse to a single CPU id; the ballast container maps to the other.
+TEST_NODE=$(kubectl get pod -l app=ballast -o jsonpath='{.items[0].spec.nodeName}')
+kubectl debug node/"$TEST_NODE" -it --image=busybox -- \
+  cat /host/var/lib/kubelet/cpu_manager_state
+```
+
+Expected shape on `e2-standard-2`:
+
+```json
+{
+  "policyName": "static",
+  "defaultCpuSet": "0",
+  "entries": { "<ballast-pod-uid>": { "ballast": "1" } }
+}
+```
+
+If you change the node machine type, set the ballast `cpu` request to
+`(node vCPUs − 1)` to keep the experiment on a single core.
 
 ## Generate load to create noisy neighbor pressure
 
@@ -104,12 +160,58 @@ fortio load -qps 50 -t 120s http://<perf-lab-svc>/cpu?iterations=100000
 fortio load -qps 20 -t 120s http://<perf-lab-svc>/fanout?workers=20
 ```
 
+## Track B — I/O stress + PSI
+
+`bully-hog` (`stress-ng --cpu ... matrixprod`) is pure in-cache compute — it never touches
+the block layer or the network stack, so it cannot test the "kernel threads / softirq /
+writeback preempt the victim" theory. Track B adds two non-CPU stressors plus a Pressure
+Stall Information (PSI) probe in the collector. See
+[`docs/latency-anomaly-investigation.md`](./docs/latency-anomaly-investigation.md) §5 and
+[`docs/proposal-non-cpu-noisy-neighbours.md`](./docs/proposal-non-cpu-noisy-neighbours.md) §5.
+
+**Run the disk and network stressors one at a time.** They load different kernel
+subsystems — disk drives writeback (`wb_workfn`) and block-queue contention, network drives
+`NET_RX` / `ksoftirqd` — and running both at once makes attribution impossible. Disk is
+the cleaner first test for the writeback-preemption story.
+
+PSI needs the DaemonSet rebuilt and redeployed first, so the new `/host/proc/pressure`
+hostPath mount and `PSI_PROC_PATH` env land:
+
+```bash
+task lima-build-image        # rebuild with psi.go
+task deploy-k8s              # roll the DaemonSet
+```
+
+Then, per run:
+
+```bash
+task deploy-victim           # the pod to watch
+task deploy-bully-io         # disk run: stress-ng --hdd/--iomix into an emptyDir
+# ...observe for a few minutes, then...
+kubectl delete -f k8s/bully-io.yaml
+
+task deploy-bully-net        # network run (SEPARATE): stress-ng --sock/--udp
+kubectl delete -f k8s/bully-net.yaml
+```
+
+What to watch:
+
+- `ebpf_psi_pressure_ratio{resource="io", scope="node"}` and
+  `{resource="io", scope="cgroup", cgroup="pod/<bully-io-uid>/..."}` — climb during the
+  disk run; `{resource="cpu"}` climbs during the network run (softirq stealing CPU).
+- `ebpf_psi_stall_seconds_total` — monotonic stall time, same labels minus `window`.
+- `ebpf_runq_latency_nanoseconds` with the dashboard's `prev_cgroup` filter **widened** to
+  include `root` / `system.slice/*`: if the theory holds, the victim's latency events start
+  attributing to kernel threads (kworker, `ksoftirqd`, writeback) instead of a pod.
+  `runqCollector` already emits `prev_cgroup` unfiltered, so no redeploy is needed for this
+  — only the dashboard filter.
+
 ## View in Cloud Monitoring
 
-Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. The dashboard requires two filters to be set before data appears:
+Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. Two dashboard filters scope every chart; both default to match-all when unset, so set them to get a readable view:
 
 - **ebpf_node** — the eBPF DaemonSet pod name (one per node). Scopes all charts to a single node; mixing nodes makes the data unreadable since scheduling is per-node.
-- **cgroup_pod** — (Noisy Neighbour section only) the victim pod to investigate, in `pod/<uid-prefix>/<cid-prefix>` form.
+- **cgroup_pod** — scopes the run-queue latency **and** noisy-neighbour charts to one victim pod, in `pod/<uid-prefix>` or `pod/<uid-prefix>/<cid-prefix>` form. Leave unset to see all pods on the node.
 
 To find a pod's cgroup label:
 ```bash
@@ -118,8 +220,10 @@ kubectl get pod <name> -o jsonpath='{.metadata.uid}' | cut -c1-8
 ```
 
 Key metrics:
-- `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s.
+- `ebpf_runq_latency_nanoseconds` — run-queue latency histogram, labelled by `cgroup` (scheduled pod) and `prev_cgroup` (pod it preempted). Buckets cover 1µs–8s. The overflow bucket (≥8.388608s) is now represented only in `_count` / the implicit `le="+Inf"` bucket — no fabricated finite ceiling; a `_count` vs last finite `_bucket` gap means "real ceiling unknown".
 - `ebpf_events_total` — confirms data is flowing from the eBPF ring buffer.
+- `ebpf_psi_pressure_ratio` — Linux PSI stall percentage (0–100), labelled by `resource` (`cpu`/`io`/`memory`), `kind` (`some`/`full`), `window` (`avg10`/`avg60`/`avg300`), `scope` (`node`/`cgroup`) and `cgroup`. See "Track B" above.
+- `ebpf_psi_stall_seconds_total` — cumulative PSI stall time in seconds (`total=` field), same labels minus `window`.
 
 Dashboard panels use `histogram_quantile` over PromQL — not the raw histogram aggregation — to get accurate p50/p99 percentiles. Example noisy-neighbour query (who is preempting pod X?):
 ```promql
@@ -130,6 +234,28 @@ histogram_quantile(
   )
 ) / 1e6
 ```
+
+## Latency-anomaly instrumentation (branch `86-ebpf/track-a-cpu-rerun`)
+
+Added to make the next CPU re-run's "8.3s p99" measurement trustworthy — see
+[`docs/latency-anomaly-investigation.md`](docs/latency-anomaly-investigation.md).
+
+Extra metrics exported by the eBPF DaemonSet:
+- `ebpf_runq_enqueued_entries` — live size of the `runq_enqueued` BPF map.
+- `ebpf_runq_enqueued_max_age_seconds` — age of the oldest entry (CLOCK_MONOTONIC).
+- `ebpf_runq_enqueued_stale_entries` — entries older than 10s (orphan/PID-reuse leak signal).
+- `ebpf_runq_latency_max_nanoseconds` — true max run-queue latency seen, unclamped by the histogram overflow bucket (needs `go generate` — runs inside `task lima-build-image`).
+
+The DaemonSet also logs a `runq_enqueued probe: entries=… max_age=… stale=… raw_max=…` line every 5s (`kubectl logs`).
+
+Tasks:
+- `task deploy-node-exporter` — node-exporter DaemonSet + PodMonitoring on the noisy-node pool, to scrape node-level CPU including steal time. Check query: `rate(node_cpu_seconds_total{mode="steal"}[5m])`.
+- `task dump-runq-enqueued` — dump `runq_enqueued` / `runq_histograms` from the `bpftool` pod on the test node for the manual §4 leak check.
+
+What to watch during the run:
+- **Leak (§4):** `ebpf_runq_enqueued_entries` / `_stale_entries` climb and never recover, `_max_age_seconds` grows without bound → the 8.3s figure is an orphan+PID-reuse artefact.
+- **Histogram clamp (§1):** p99 pins to 8.388608s / `+Inf` while `ebpf_runq_latency_max_nanoseconds` shows the real magnitude.
+- **Steal time (§3):** non-trivial `node_cpu_seconds_total{mode="steal"}` rate on the test node during the anomalous window.
 
 ## Outcomes
 

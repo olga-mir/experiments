@@ -120,12 +120,29 @@ func (c *runqCollector) Collect(ch chan<- prometheus.Metric) {
 			cumul += counts[b-1]
 			cumulBuckets[bucketBoundsNs[b]] = cumul
 		}
-		// Absorb BPF overflow bucket (23) into the last Prometheus bucket,
-		// clamping those events to ≤ bucketBoundsNs[23] (~8.4 s).
-		cumulBuckets[bucketBoundsNs[numBuckets-1]] += counts[numBuckets-1]
+		// BPF bucket 23 is the overflow catch-all: latency ≥ bucketBoundsNs[23]
+		// (≈ 8.388608 s) with NO upper bound. It must NOT be folded into the
+		// finite le=bucketBoundsNs[23] key — doing so fabricates an 8.39 s
+		// ceiling for events that might really be 8 s or 800 s. Every finite le
+		// key is therefore left holding only bounded (BPF bucket ≤ 22)
+		// observations; the overflow events reach the series solely through the
+		// implicit le="+Inf" bucket that MustNewConstHistogram derives from
+		// totalCount. Consequences downstream:
+		//   - histogram_quantile for a p99 that ranks past the last finite
+		//     bucket resolves to the edge of the unbounded region (+Inf, or
+		//     ≈ 8.39 s depending on the PromQL engine) instead of a fabricated
+		//     interpolated value below it.
+		//   - _count minus the le=bucketBoundsNs[23] bucket == the number of
+		//     unbounded (bucket-23) events; a non-zero gap means "true latency
+		//     ceiling unknown — read ebpf_runq_latency_max_nanoseconds".
 		totalCount := cumul + counts[numBuckets-1]
 
-		// Approximate sum using bucket midpoints; overflow bucket uses lower bound.
+		// Approximate _sum from bucket midpoints. Bucket 23 has no upper bound,
+		// so each overflow event can only be charged at its lower bound
+		// (bucketBoundsNs[23]); whenever counts[23] > 0 this makes _sum a hard
+		// underestimate and any rate(_sum)/rate(_count) mean a lower bound only.
+		// The raw-max side channel (ebpf_runq_latency_max_nanoseconds) carries
+		// the true magnitude in that regime.
 		var sum float64
 		for b := 0; b < numBuckets-1; b++ {
 			mid := (bucketBoundsNs[b] + bucketBoundsNs[b+1]) / 2
@@ -277,9 +294,25 @@ func main() {
 	}
 	defer switchLink.Close()
 
+	// sched_process_exit deletes a task's runq_enqueued entry when it exits,
+	// so a wakeup timestamp for a task that never gets scheduled can't linger
+	// and be misread as multi-second run-queue latency after PID reuse.
+	// See docs/latency-anomaly-investigation.md §4.
+	exitLink, err := link.AttachTracing(link.TracingOptions{
+		Program:    objs.TpSchedProcessExit,
+		AttachType: ebpf.AttachTraceRawTp,
+	})
+	if err != nil {
+		log.Fatalf("Failed to attach sched_process_exit: %v", err)
+	}
+	defer exitLink.Close()
+
 	mapper := newCgroupMapper()
 
 	prometheus.MustRegister(newRunqCollector(&objs, mapper))
+	prometheus.MustRegister(newPSICollector(mapper))
+
+	go watchRunqEnqueued(&objs) // debug.go: runq_enqueued orphan / PID-reuse leak probe
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())

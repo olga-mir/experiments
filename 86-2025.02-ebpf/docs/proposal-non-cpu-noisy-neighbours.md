@@ -66,6 +66,33 @@ This proposal documents additional **non-CPU noisy neighbor vectors** (Memory, D
 * **Instrumentation Strategy:**
   * Expose `/proc/pressure/{cpu,memory,io}` and cgroup-level `/sys/fs/cgroup/.../memory.pressure` metrics into Prometheus alongside eBPF scheduling metrics.
 
+### B. Implemented
+
+`psi.go` (`psiCollector`, a `prometheus.Collector` registered from `main()` on the line
+right after `runqCollector`) parses the kernel's plain-text pressure files on every
+scrape — pure userspace, no BPF:
+
+* **Node** — `${PSI_PROC_PATH}/{cpu,io,memory}`. `PSI_PROC_PATH` defaults to
+  `/proc/pressure`; `k8s/ebpf-daemonset.yaml` hostPath-mounts the host's `/proc/pressure`
+  at `/host/proc/pressure` and sets the env var (the pod's own `/proc` is the container's,
+  not the node's). A missing `full` line on `/proc/pressure/cpu` is tolerated.
+* **Per-cgroup** — `<cgroup>/{cpu,io,memory}.pressure` under the already-mounted read-only
+  `/sys/fs/cgroup`, restricted to `pod/*` cgroups only (the same
+  `strings.HasPrefix(cgroup, "pod/")` guard `runqCollector` uses), labels resolved through
+  the shared `cgroupMapper` / `cgroupLabel`.
+
+Metrics:
+
+* `ebpf_psi_pressure_ratio{resource="cpu|io|memory", kind="some|full", window="avg10|avg60|avg300", scope="node|cgroup", cgroup=""|"pod/<uid>/<cid>"}`
+  — gauge, the kernel's `avgN` stall percentage (0–100).
+* `ebpf_psi_stall_seconds_total{resource, kind, scope, cgroup}` — counter, from the
+  `total=` field (µs → s).
+
+Pairs with the Track B stressors `k8s/bully-io.yaml` / `k8s/bully-net.yaml`
+(`task deploy-bully-io` / `task deploy-bully-net`): during the disk run, watch
+`ebpf_psi_pressure_ratio{resource="io"}` climb on both `scope="node"` and the stressor's
+`scope="cgroup"` series.
+
 ---
 
 ## Summary Roadmap Matrix
@@ -77,4 +104,4 @@ This proposal documents additional **non-CPU noisy neighbor vectors** (Memory, D
 | **Memory Reclaim** | `alloc_pages` / `kswapd` | `kprobe/mm_vmscan_direct_reclaim_begin` | Medium |
 | **Disk I/O** | Page cache flushes, block queues | `tp/block_rq_issue`, `tp/block_rq_complete` | Medium |
 | **Network SoftIRQ** | SoftIRQ packet processing | `tp/softirq_entry`, `tp/softirq_exit` | Medium |
-| **PSI Telemetry** | System & Cgroup pressure | `/proc/pressure/*`, `/sys/fs/cgroup/*/*.pressure` | Low |
+| **PSI Telemetry** | System & Cgroup pressure | `/proc/pressure/*`, `/sys/fs/cgroup/*/*.pressure` | **Implemented** (`psi.go`; was: Low) — `ebpf_psi_pressure_ratio`, `ebpf_psi_stall_seconds_total` |
