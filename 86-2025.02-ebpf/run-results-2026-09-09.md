@@ -241,3 +241,48 @@ correctly separates "the node is contended" from "this pod is the cause".
 - `bully-net` (`prev_cgroup`) = `pod/c3a889f2`
 
 Steal-time check query: `rate(node_cpu_seconds_total{mode="steal"}[5m])` on the test node.
+
+---
+
+## Follow-up verification (2026-09-09, later) — leak fix confirmed clean
+
+Ran the controlled restart → idle → single-stressor sequence from
+`docs/latency-anomaly-investigation.md` §"Follow-up plan", output in `ex5-run-output.txt`.
+`runq_histograms` is cumulative for the pod's lifetime, so figures below are deltas between
+phases, not per-phase totals.
+
+| Phase | `runq_enqueued` | New bucket-22 (4.19–8.39s) | New bucket-23 (≥8.39s) |
+|---|--:|--:|--:|
+| 1 — immediately after full pod restart | 0–2 (snapshot noise) | 1 | 0 |
+| 2 — after 90s **idle, zero stressors** | 0 | +1 | +1 |
+| 3 — after 180s `bully-hog` alone | 1–2 (snapshot noise) | +0 | +3 |
+
+`runq_enqueued` staying at 0–2 throughout — including after a full stress run — confirms
+§4 (the `ctx[0]` fix) holds: no backlog, no unbounded growth.
+
+A handful of top-bucket events did still appear, including during the pure-idle window,
+which rules out "residual leak under load" as their cause. Traced via the bpftool pod's
+mounted host `/sys` (`find /sys/fs/cgroup -inum 5998 -o -inum 1`):
+
+- `cgroup_id 1` = `/sys/fs/cgroup` itself — the cgroup root.
+- `cgroup_id 5998` (`0x176e`) = `/sys/fs/cgroup/system.slice/containerd.service` — the
+  node's own container runtime, not a pod, not `bully-hog`.
+
+**Every anomalous event's victim side (`cgroup`) resolved to `root` or
+`system.slice/containerd.service`, never `pod/*`.** `runqCollector.Collect()` in `main.go`
+filters the victim side to `strings.HasPrefix(cgroup, "pod/")` — so all of these were
+already being silently dropped before export to Prometheus. They're visible only in the
+raw `bpftool` map dump, which bypasses that filter; the dashboard and `histogram_quantile`
+queries the talk is built on were never contaminated by them.
+
+**Verdict:** §4 is closed. The `runq_enqueued` leak is fixed and independently confirmed
+three ways (empty map, no idle-window growth, and the one remaining anomaly traced to a
+non-pod system service already excluded from the exported metric). Pod-to-pod p99 is
+genuinely clean — dominated by sub-100ms events, no evidence of real multi-second pod
+starvation. The original "8.3s" headline is retired; safe to finalize the corrected numbers
+in `ebpf-noisy-neighbor-analysis.md`.
+
+Still open, unrelated to §4: §5 (kernel-thread/writeback preemption theory) — `fortio-load`
+traffic was added ahead of the `bully-io`/`bully-net` runs in this session, so dashboard
+screenshots with `prev_cgroup` widened to `root`/`system.slice/*` (pending, to be collected
+later today) should finally be able to answer it.
