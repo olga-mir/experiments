@@ -197,15 +197,21 @@ correctly separates "the node is contended" from "this pod is the cause".
    After the fix, `entries` should track the count of *currently runnable* tasks (tens,
    not thousands) and `max_age` should stay sub-second.
 
-   **Root cause found + fixed (2026-09-09, commits follow this report):** not PID reuse —
-   a refactor (`03888db`) had rewritten `tp_sched_wakeup` from `u64 *ctx` /
-   `(void *)ctx[0]` to `void *ctx` / `(struct task_struct *)ctx`, dropping the `[0]`
-   index into the `tp_btf` args array. Every `sched_wakeup` then stored `runq_enqueued`
-   under a garbage key that `sched_switch` (still correctly using `ctx[2]`) could never
-   match or delete → unbounded growth, ~99 % stale, fabricated multi-second latencies.
-   Fix restores `ctx[0]` in `tp_sched_wakeup` and adds a `sched_process_exit` mop-up
-   hook. Built, pushed, deployed; verification in progress. See
-   `docs/latency-anomaly-investigation.md` §4 "Root cause found".
+   **Root cause found (2026-09-09):** not PID reuse — a refactor (`03888db`) had
+   rewritten `tp_sched_wakeup` from `u64 *ctx` / `(void *)ctx[0]` to `void *ctx` /
+   `(struct task_struct *)ctx`, dropping the `[0]` index into the `tp_btf` args array.
+   Every `sched_wakeup` then stored `runq_enqueued` under a garbage key that
+   `sched_switch` (still correctly using `ctx[2]`) could never match or delete →
+   unbounded growth, ~99 % stale, fabricated multi-second latencies.
+
+   **Status:** `52b9b2d` (a `sched_process_exit` mop-up hook, alone) was built + deployed
+   and *still leaked on an idle node* — which is how the `ctx[0]` bug was found. `eadd5bf`
+   (restores `ctx[0]` in `tp_sched_wakeup`, keeps the exit hook) is **committed but not
+   built** — the Docker Hub base images were unreachable from Docker Desktop at the time.
+   The collector on the cluster is still `52b9b2d` and still leaking. Finish with
+   `task local-build-image && task deploy-k8s && kubectl -n test-ebpf rollout restart
+   ds/ebpf-ds`, or build in Lima if Docker Hub is still down. See
+   `docs/latency-anomaly-investigation.md` §4.
 2. **Re-read the ceiling** once (1) is done: `histogram_quantile(0.99, …)` and
    `ebpf_runq_latency_max_nanoseconds` for the CPU run. Expectation: low-ms p99, and the
    "8.3 s" story is retired for the talk (replace with "our first number was an
@@ -214,8 +220,15 @@ correctly separates "the node is contended" from "this pod is the cause".
    widened on the dashboard, to finally test §5.
 4. Fix `k8s/bpftool-daemonset.yaml` (toleration + selector + prebuilt image) so the raw
    map dump is available as a cross-check.
-5. Decide whether `bully-net` stays up — it's still running and the leak is still growing
-   while it is. `kubectl delete -f k8s/bully-net.yaml` when done inspecting the dashboard.
+5. `bully-net` was deleted during idle-node testing of the fix — no stressors are running.
+   Re-deploy one (`task deploy-bully`) only *after* the `ctx[0]`-fixed image is live, so
+   the before/after on `histogram_quantile(0.99, …)` is meaningful.
+6. **De-risk the build from Docker Hub.** `Dockerfile` does `FROM golang:1.25` and
+   `FROM ubuntu:24.10` — both from Docker Hub (`docker.io/library/*`); GAR is only the
+   `--push` target. A Docker Hub outage blocks the whole build even though nothing else
+   uses it. Mirror the two base images into Artifact Registry (a remote/pull-through repo,
+   or `gcloud artifacts docker ... copy`/`crane cp` the pinned tags) and point the
+   `FROM` lines at `australia-southeast1-docker.pkg.dev/...`. Then builds only touch GAR.
 
 ---
 

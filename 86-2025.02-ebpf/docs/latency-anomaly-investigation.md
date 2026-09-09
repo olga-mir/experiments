@@ -164,7 +164,7 @@ multi-minute "latency" that filled the histogram overflow bucket. The `prev→ne
 *edges* in `ebpf-noisy-neighbor-analysis.md` come straight from `sched_switch` and may still
 be real; the latency *magnitudes* attached to them were not.
 
-**Fixed (2026-09-09) — built & deployed, verifying:**
+**Fix in source (2026-09-09) — committed `eadd5bf`, NOT yet built/deployed/verified:**
 - `bpf/noisy-neighbour.bpf.c`: `tp_sched_wakeup` restored to `u64 *ctx` /
   `(struct task_struct *)ctx[0]` (matches `tp_sched_switch`'s idiom and the pre-`03888db`
   version).
@@ -174,10 +174,29 @@ be real; the latency *magnitudes* attached to them were not.
   `sched_wakeup` / `sched_switch` links.
 - No map-layout change → `debug.go` / `dump-runq-enqueued.sh` untouched; the
   `ebpf_runq_enqueued_*` gauges are the regression check.
-- **What "fixed" looks like:** `ebpf_runq_enqueued_entries` tracks only genuinely-runnable
-  tasks (single/double digits) and stays flat; `_stale_entries` ~0; `_max_age_seconds`
-  sub-second; `histogram_quantile(0.99, …)` and `ebpf_runq_latency_max_nanoseconds` drop to
-  plausible (low-ms) values.
+
+**Deployment status (2026-09-09):**
+- `52b9b2d` (the `sched_process_exit` hook *alone*, before the `ctx[0]` fix) was built,
+  pushed to GAR, and rolled onto `ebpf-ds`. On an **idle** node it still leaked
+  (`entries` 55 → 400+ in 4 min, `max_age` tracking wall-clock) — proof the orphans are
+  not "tasks that exited", which is what sent the investigation to `git log` and the
+  `ctx[0]` bug.
+- `eadd5bf` (the actual `ctx[0]` fix) is **committed but not built** — the Docker build
+  base images (`golang:1.25`, `ubuntu:24.10`) come from Docker Hub and Docker Desktop's
+  VM could not reach `registry-1.docker.io` at the time (`DeadlineExceeded`). The
+  collector running on the cluster is still `52b9b2d` and still leaking.
+- **To finish:** `task local-build-image && task deploy-k8s` then
+  `kubectl -n test-ebpf rollout restart ds/ebpf-ds` (image tag is `:latest`, so a restart
+  is needed to re-pull). If Docker Hub is still unreachable, build inside Lima
+  (`task lima-start` → `task docker-auth` → `limactl shell ebpf-dev` →
+  `task lima-build-image`) — separate VM, separate network path. Longer-term, mirror the
+  base images into Artifact Registry so builds don't depend on Docker Hub (see README
+  "Build").
+
+- **What "verified fixed" looks like:** `ebpf_runq_enqueued_entries` tracks only
+  genuinely-runnable tasks (single/double digits) and stays flat; `_stale_entries` ~0;
+  `_max_age_seconds` sub-second; `histogram_quantile(0.99, …)` and
+  `ebpf_runq_latency_max_nanoseconds` drop to plausible (low-ms) values.
 - **Escalation still available** if a real re-run under load shows residual growth: key the
   map on `pid + task start_time` to defend against genuinely-missed `sched_switch` events +
   PID reuse. Held back (changes the key struct / `debug.go` iterate loop) — the context-bug

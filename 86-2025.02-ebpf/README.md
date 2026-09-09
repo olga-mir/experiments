@@ -45,6 +45,15 @@ $ task lima-build-push
 
 This task will push image to GCP GAR and from there it can be deployed to a GKE cluster as described in section below
 
+> **Build depends on Docker Hub, not just GAR.** GAR is only the `--push` target. The
+> [`Dockerfile`](./Dockerfile) pulls its base images — `golang:1.25` and `ubuntu:24.10` —
+> from Docker Hub (`docker.io/library/*`), so a Docker Hub outage or an unreachable
+> `registry-1.docker.io` fails the whole build (`ERROR: ... DeadlineExceeded: context
+> deadline exceeded` on `load metadata for docker.io/library/...`). Seen 2026-09-09 from
+> Docker Desktop. Workarounds: retry, build inside Lima (separate VM/network), or —
+> better — mirror the two base images into Artifact Registry (remote/pull-through repo or
+> `crane cp` the pinned tags) and repoint the `FROM` lines so the build only touches GAR.
+
 # GKE
 
 To explore eBPF on the host direclty is challenging in GKE because (rightfully so) there is no `apt` or `make`. It should be possible to download `bpftool` with `curl` but it would require building it from source to target COS env somehere which is not COS.
