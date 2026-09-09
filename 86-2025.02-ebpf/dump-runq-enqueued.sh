@@ -12,12 +12,24 @@
 #   kubectl apply -f k8s/bpftool-daemonset.yaml
 #
 # Env overrides: NAMESPACE (default test-ebpf), NODE_SELECTOR (default
-# workload=noisy-node).
+# workload=noisy-node), KUBE_CONTEXT (default: current kube context; `task
+# dump-runq-enqueued` passes the cluster's context explicitly).
 
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-test-ebpf}"
 NODE_SELECTOR="${NODE_SELECTOR:-workload=noisy-node}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+
+# Pin every kubectl call below to $KUBE_CONTEXT when set, so the dump always
+# targets the intended cluster regardless of `kubectl config current-context`.
+kubectl() {
+  if [[ -n "${KUBE_CONTEXT}" ]]; then
+    command kubectl --context "${KUBE_CONTEXT}" "$@"
+  else
+    command kubectl "$@"
+  fi
+}
 
 echo "Finding a node matching '${NODE_SELECTOR}'..."
 node="$(kubectl get nodes -l "${NODE_SELECTOR}" -o jsonpath='{.items[0].metadata.name}')"

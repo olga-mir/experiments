@@ -4,6 +4,18 @@
 
 set -euo pipefail
 
+# Pin every kubectl call to an explicit context when the caller sets one
+# (`task list-pod-cgroups` passes KUBE_CONTEXT); fall back to the current
+# context for standalone use.
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+kubectl() {
+  if [[ -n "${KUBE_CONTEXT}" ]]; then
+    command kubectl --context "${KUBE_CONTEXT}" "$@"
+  else
+    command kubectl "$@"
+  fi
+}
+
 echo "Fetching pods across all namespaces..."
 echo ""
 
