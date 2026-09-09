@@ -153,4 +153,28 @@ int tp_sched_switch(__u64 *ctx)
     return 0;
 }
 
+// Proactive orphan cleanup for runq_enqueued — see
+// docs/latency-anomaly-investigation.md §4.
+//
+// tp_sched_switch only removes a pid from runq_enqueued when that pid is matched
+// as `next`. A task that gets a sched_wakeup timestamp but exits before it is
+// ever scheduled (or whose sched_switch is simply missed) leaves its timestamp
+// in the map forever. Under PID reuse an unrelated task later inherits that pid,
+// hits the stale timestamp in tp_sched_switch, and is charged a fabricated
+// multi-second (observed: multi-*minute*) run-queue latency. Short-lived tasks
+// exiting between wakeup and first schedule are the dominant source of those
+// orphans; deleting the entry on task exit removes them.
+//
+// sched_process_exit fires from do_exit() for every task (thread), not just the
+// thread-group leader, so per-thread orphans are covered too. ctx is the single
+// task_struct* argument, accessed the same way tp_sched_wakeup accesses its own.
+SEC("tp_btf/sched_process_exit")
+int tp_sched_process_exit(void *ctx)
+{
+    struct task_struct *p = (struct task_struct *)ctx;
+    u32 pid = BPF_CORE_READ(p, pid);
+    bpf_map_delete_elem(&runq_enqueued, &pid);
+    return 0;
+}
+
 char LICENSE[] SEC("license") = "GPL";

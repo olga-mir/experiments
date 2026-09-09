@@ -130,6 +130,35 @@ collisions, or hook `sched_process_exit` to clean up orphaned entries proactivel
   behind `/proc/uptime`. If confirmed, the 8.3s figure is an orphan+PID-reuse artefact and
   the histogram/steal-time findings are moot for this run.
 
+**Confirmed by the 2026-09-09 run** (`run-results-2026-09-09.md`): `runq_enqueued` grew
+404 → 3 746+ entries with ~99.5 % of them stale, `max_age_seconds` climbed 1:1 with
+wall-clock (oldest entry predated every stressor), and the raw-max side channel
+`ebpf_runq_latency_max_nanoseconds` read **73 minutes** by end of run. The 8.3 s p99 is
+this artefact.
+
+**Fixed (2026-09-09) — pending rebuild/redeploy:**
+- New BPF program `tp_sched_process_exit` in `bpf/noisy-neighbour.bpf.c`
+  (`SEC("tp_btf/sched_process_exit")`) does
+  `bpf_map_delete_elem(&runq_enqueued, &pid)` on every task exit, evicting the wakeup
+  timestamp of any task that exits before it is ever scheduled — the dominant orphan
+  source. `sched_process_exit` fires per-thread from `do_exit()`, so per-thread orphans
+  are covered.
+- Attached in `main.go` alongside the existing `sched_wakeup` / `sched_switch` links
+  (`objs.TpSchedProcessExit`, `ebpf.AttachTraceRawTp`).
+- No map-layout change, so `debug.go` / `dump-runq-enqueued.sh` are untouched; the
+  `ebpf_runq_enqueued_*` gauges now double as the fix's regression check.
+- **Not yet built or deployed** — needs `go generate` (bpf2go, Lima/Docker) →
+  `task lima-build-image` → `task deploy-k8s`, then a re-run.
+- **Escalation if a re-run still shows growth:** make the map key `pid + task
+  start-time` (`BPF_CORE_READ(task, start_time)`) so a recycled PID with a genuinely
+  missed `sched_switch` still can't collide with a stale entry. Deferred because it
+  changes the map key struct (touches `debug.go`'s iterate loop) and the exit hook alone
+  should clear the overwhelming majority of orphans.
+- **What "fixed" looks like next run:** `ebpf_runq_enqueued_entries` tracks the count of
+  genuinely-runnable tasks (tens, not thousands) and stays flat; `_stale_entries` stays
+  at/near 0; `_max_age_seconds` stays sub-second; `histogram_quantile(0.99, …)` and
+  `ebpf_runq_latency_max_nanoseconds` drop to plausible (low-ms) values.
+
 ## Priority order for next test run
 
 1. Dump `runq_enqueued` during/after the load test — cheapest check, no new code, and the

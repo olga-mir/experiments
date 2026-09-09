@@ -294,6 +294,19 @@ func main() {
 	}
 	defer switchLink.Close()
 
+	// sched_process_exit deletes a task's runq_enqueued entry when it exits,
+	// so a wakeup timestamp for a task that never gets scheduled can't linger
+	// and be misread as multi-second run-queue latency after PID reuse.
+	// See docs/latency-anomaly-investigation.md §4.
+	exitLink, err := link.AttachTracing(link.TracingOptions{
+		Program:    objs.TpSchedProcessExit,
+		AttachType: ebpf.AttachTraceRawTp,
+	})
+	if err != nil {
+		log.Fatalf("Failed to attach sched_process_exit: %v", err)
+	}
+	defer exitLink.Close()
+
 	mapper := newCgroupMapper()
 
 	prometheus.MustRegister(newRunqCollector(&objs, mapper))
