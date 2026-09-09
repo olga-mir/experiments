@@ -208,10 +208,10 @@ What to watch:
 
 ## View in Cloud Monitoring
 
-Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. The dashboard requires two filters to be set before data appears:
+Import `gcp-dashboard.json` into Cloud Monitoring → Dashboards. Two dashboard filters scope every chart; both default to match-all when unset, so set them to get a readable view:
 
 - **ebpf_node** — the eBPF DaemonSet pod name (one per node). Scopes all charts to a single node; mixing nodes makes the data unreadable since scheduling is per-node.
-- **cgroup_pod** — (Noisy Neighbour section only) the victim pod to investigate, in `pod/<uid-prefix>/<cid-prefix>` form.
+- **cgroup_pod** — scopes the run-queue latency **and** noisy-neighbour charts to one victim pod, in `pod/<uid-prefix>` or `pod/<uid-prefix>/<cid-prefix>` form. Leave unset to see all pods on the node.
 
 To find a pod's cgroup label:
 ```bash
