@@ -197,12 +197,15 @@ correctly separates "the node is contended" from "this pod is the cause".
    After the fix, `entries` should track the count of *currently runnable* tasks (tens,
    not thousands) and `max_age` should stay sub-second.
 
-   **Done in source (2026-09-09, commit follows this report):** the `sched_process_exit`
-   hook is implemented in `bpf/noisy-neighbour.bpf.c` + attached in `main.go` (no
-   map-layout change). **Not yet built/deployed** — needs `task lima-build-image`
-   (regenerates bpf2go) → `task deploy-k8s` → re-run. The composite-key change is held as
-   the escalation if a re-run still shows growth. See
-   `docs/latency-anomaly-investigation.md` §4 "Fixed (2026-09-09)".
+   **Root cause found + fixed (2026-09-09, commits follow this report):** not PID reuse —
+   a refactor (`03888db`) had rewritten `tp_sched_wakeup` from `u64 *ctx` /
+   `(void *)ctx[0]` to `void *ctx` / `(struct task_struct *)ctx`, dropping the `[0]`
+   index into the `tp_btf` args array. Every `sched_wakeup` then stored `runq_enqueued`
+   under a garbage key that `sched_switch` (still correctly using `ctx[2]`) could never
+   match or delete → unbounded growth, ~99 % stale, fabricated multi-second latencies.
+   Fix restores `ctx[0]` in `tp_sched_wakeup` and adds a `sched_process_exit` mop-up
+   hook. Built, pushed, deployed; verification in progress. See
+   `docs/latency-anomaly-investigation.md` §4 "Root cause found".
 2. **Re-read the ceiling** once (1) is done: `histogram_quantile(0.99, …)` and
    `ebpf_runq_latency_max_nanoseconds` for the CPU run. Expectation: low-ms p99, and the
    "8.3 s" story is retired for the talk (replace with "our first number was an

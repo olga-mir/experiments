@@ -136,28 +136,52 @@ wall-clock (oldest entry predated every stressor), and the raw-max side channel
 `ebpf_runq_latency_max_nanoseconds` read **73 minutes** by end of run. The 8.3 s p99 is
 this artefact.
 
-**Fixed (2026-09-09) — pending rebuild/redeploy:**
-- New BPF program `tp_sched_process_exit` in `bpf/noisy-neighbour.bpf.c`
-  (`SEC("tp_btf/sched_process_exit")`) does
-  `bpf_map_delete_elem(&runq_enqueued, &pid)` on every task exit, evicting the wakeup
-  timestamp of any task that exits before it is ever scheduled — the dominant orphan
-  source. `sched_process_exit` fires per-thread from `do_exit()`, so per-thread orphans
-  are covered.
-- Attached in `main.go` alongside the existing `sched_wakeup` / `sched_switch` links
-  (`objs.TpSchedProcessExit`, `ebpf.AttachTraceRawTp`).
-- No map-layout change, so `debug.go` / `dump-runq-enqueued.sh` are untouched; the
-  `ebpf_runq_enqueued_*` gauges now double as the fix's regression check.
-- **Not yet built or deployed** — needs `go generate` (bpf2go, Lima/Docker) →
-  `task lima-build-image` → `task deploy-k8s`, then a re-run.
-- **Escalation if a re-run still shows growth:** make the map key `pid + task
-  start-time` (`BPF_CORE_READ(task, start_time)`) so a recycled PID with a genuinely
-  missed `sched_switch` still can't collide with a stale entry. Deferred because it
-  changes the map key struct (touches `debug.go`'s iterate loop) and the exit hook alone
-  should clear the overwhelming majority of orphans.
-- **What "fixed" looks like next run:** `ebpf_runq_enqueued_entries` tracks the count of
-  genuinely-runnable tasks (tens, not thousands) and stays flat; `_stale_entries` stays
-  at/near 0; `_max_age_seconds` stays sub-second; `histogram_quantile(0.99, …)` and
-  `ebpf_runq_latency_max_nanoseconds` drop to plausible (low-ms) values.
+### Root cause found (2026-09-09): `tp_sched_wakeup` lost its `ctx[0]` index
+
+It is not primarily PID reuse. `tp_btf` programs get the raw tracepoint args array as
+context; `sched_wakeup`'s single arg (`struct task_struct *p`) is `ctx[0]`. The **original**
+handler had this right:
+
+```c
+int tp_sched_wakeup(u64 *ctx) {
+    struct task_struct *task = (void *)ctx[0];   // correct
+```
+
+A later refactor (`03888db`, "replace ringbuf streaming with in-kernel histogram") rewrote it
+to:
+
+```c
+int tp_sched_wakeup(void *ctx) {
+    task = (struct task_struct *)ctx;            // BUG: ctx is the args array, not ctx[0]
+    __u32 pid = BPF_CORE_READ(task, pid);        // reads pid at (args-array addr + pid offset) = garbage
+```
+
+So nearly every `sched_wakeup` inserted `runq_enqueued[<garbage/constant>] = ts`.
+`tp_sched_switch` kept the correct `ctx[2]` for `next`, so its lookups by real `next_pid`
+almost never matched — entries were never deleted (unbounded growth, ~99 % stale) and the
+occasional coincidental match against a long-dead key produced the multi-second /
+multi-minute "latency" that filled the histogram overflow bucket. The `prev→next` cgroup
+*edges* in `ebpf-noisy-neighbor-analysis.md` come straight from `sched_switch` and may still
+be real; the latency *magnitudes* attached to them were not.
+
+**Fixed (2026-09-09) — built & deployed, verifying:**
+- `bpf/noisy-neighbour.bpf.c`: `tp_sched_wakeup` restored to `u64 *ctx` /
+  `(struct task_struct *)ctx[0]` (matches `tp_sched_switch`'s idiom and the pre-`03888db`
+  version).
+- New `tp_sched_process_exit` (`SEC("tp_btf/sched_process_exit")`, also `ctx[0]`) does
+  `bpf_map_delete_elem(&runq_enqueued, &pid)` on task exit — a cheap mop-up for the genuine
+  orphan (task woken but never scheduled before it exits). Attached in `main.go` next to the
+  `sched_wakeup` / `sched_switch` links.
+- No map-layout change → `debug.go` / `dump-runq-enqueued.sh` untouched; the
+  `ebpf_runq_enqueued_*` gauges are the regression check.
+- **What "fixed" looks like:** `ebpf_runq_enqueued_entries` tracks only genuinely-runnable
+  tasks (single/double digits) and stays flat; `_stale_entries` ~0; `_max_age_seconds`
+  sub-second; `histogram_quantile(0.99, …)` and `ebpf_runq_latency_max_nanoseconds` drop to
+  plausible (low-ms) values.
+- **Escalation still available** if a real re-run under load shows residual growth: key the
+  map on `pid + task start_time` to defend against genuinely-missed `sched_switch` events +
+  PID reuse. Held back (changes the key struct / `debug.go` iterate loop) — the context-bug
+  fix should make the map behave.
 
 ## Priority order for next test run
 
