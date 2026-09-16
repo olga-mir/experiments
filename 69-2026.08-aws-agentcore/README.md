@@ -42,14 +42,6 @@ you ──invoke_agent_runtime()──▶ AgentCore Runtime (PUBLIC network mode
   The execution role is scoped to `s3:GetObject`/`s3:PutObject` on a single bucket
   (`agentcore-artifacts-<account>-<region>`), created by `deploy.py`.
 
-## Layout
-
-- `cluster.yaml` — eksctl config: Fargate-only (no idle EC2 nodes), access-entry auth mode
-- `broken-app/` — a deliberately crash-looping Deployment (`payments-worker`) in namespace `demo`, for the
-  agent to diagnose
-- `rbac/agent-rbac.yaml` — scoped ClusterRole/Binding for the agent's IAM role
-- `agent/` — the LangGraph agent, deploy/invoke/cleanup scripts
-
 ## Usage
 
 ```bash
@@ -84,3 +76,10 @@ task cluster-down    # deletes the EKS cluster — stops the ~$0.10/hr control-p
 
 ### AWS Coding Harness Trace Tree
 <img src="screenshots/aws-coding-harness-trace-tree.png" alt="AWS Coding Harness Trace Tree" style="max-width: 650px;" />
+
+### GCP Workload Identity Federation Audit
+<img src="screenshots/gcp-workload-identity-federation-audit.png" alt="GCP Workload Identity Federation Audit" style="max-width: 650px;" />
+
+### GCP Cloud Logging & MCP Audit Trail
+<img src="screenshots/gcp-cloud-logging-mcp-audit-trail.png" alt="GCP Cloud Logging and MCP Audit Trail" style="max-width: 650px;" />
+
