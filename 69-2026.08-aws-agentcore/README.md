@@ -66,6 +66,36 @@ task invoke -- "Fetch input/ticket.txt from S3 and investigate the reported issu
 task cleanup-agent   # deletes the AgentCore runtime, its IAM role, and the S3 code artifact
 task cluster-down    # deletes the EKS cluster — stops the ~$0.10/hr control-plane charge
 ```
+## AWS to GKE use-case
+
+The same agent pattern works against a **GKE cluster** — the only things that change are the
+cluster auth and the Kubernetes API server endpoint. Everything else (LangGraph agent, tool
+definitions, AgentCore Runtime deployment) stays identical.
+
+### How cross-cloud auth works
+
+Instead of the EKS presigned-STS bearer token (`agent/eks_auth.py`), authentication to GKE
+uses **Workload Identity Federation**:
+
+1. The AgentCore Runtime's IAM execution role is added as a trusted principal in a GCP Workload
+   Identity Pool (AWS provider).
+2. Google Security Token Service exchanges the AWS STS token for a short-lived GCP access token.
+3. The agent uses that GCP token to call the GKE API — no service account key files, no manual
+   credential rotation.
+
+The GCP screenshots below show the WIF audit trail in Cloud Logging and the federation
+configuration that was used during this experiment.
+
+### Sample agent output
+
+Running the agent against a GKE cluster with Flux CD installed surfaced a broken `develop`
+branch reference in the `source-controller` component. The full findings are saved in
+[apps-dev-2026-09-07.md](apps-dev-2026-09-07.md):
+
+> **Summary:** Multiple warnings from `source-controller` (flux-system namespace) — Git operation
+> failed to resolve `refs/heads/develop`. Recommendations: verify the branch name and repo URL in
+> the Flux `GitRepository` resource, confirm access permissions for the sync service account.
+
 ## Screenshots
 
 ### AWS SRE Agent Panel
