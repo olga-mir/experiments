@@ -1,0 +1,89 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  REGION: '{{.REGION | default "us-central1"}}'
+  SERVICE_NAME: ping-aic-explainer
+
+tasks:
+  default:
+    cmds: [task --list]
+
+  preflight:
+    desc: Fail if required env is missing; warn on optional vars
+    cmds:
+      - |
+        set -euo pipefail
+        missing=0
+        if [ -z "${GOOGLE_CLOUD_PROJECT:-}" ]; then
+          echo "ERROR: GOOGLE_CLOUD_PROJECT is required. Copy .env.example to .env and set it." >&2
+          missing=1
+        fi
+        if [ -z "${GOOGLE_CLOUD_LOCATION:-}" ]; then
+          echo "WARN: GOOGLE_CLOUD_LOCATION is unset; Vertex model calls default from ADC/client config." >&2
+        fi
+        if [ -z "${GOOGLE_CLOUD_REGION:-}" ]; then
+          echo "WARN: GOOGLE_CLOUD_REGION is unset; deploy tasks use {{.REGION}}." >&2
+        fi
+        if [ "${missing}" -ne 0 ]; then
+          exit 1
+        fi
+        echo "preflight ok project=${GOOGLE_CLOUD_PROJECT} location=${GOOGLE_CLOUD_LOCATION:-unset} deploy_region={{.REGION}}"
+
+  setup:
+    desc: Install Python deps with uv via agents-cli
+    cmds:
+      - agents-cli install
+
+  playground:
+    desc: Run the local ADK playground
+    deps: [setup]
+    cmds:
+      - agents-cli playground
+
+  run:
+    desc: 'One-shot local prompt. PROMPT="..."'
+    deps: [setup]
+    cmds:
+      - agents-cli run "{{.PROMPT | default `What is PingOne Advanced Identity Cloud?`}}"
+
+  test:
+    desc: Unit tests (no live model)
+    deps: [setup]
+    cmds:
+      - uv run pytest tests/unit -q
+
+  deploy:
+    desc: Deploy to Agent Runtime (needs GOOGLE_CLOUD_PROJECT)
+    deps: [preflight, setup]
+    cmds:
+      - |
+        agents-cli deploy \
+          --project "${GOOGLE_CLOUD_PROJECT}" \
+          --region "{{.REGION}}" \
+          --service-name "{{.SERVICE_NAME}}" \
+          --no-confirm-project
+
+  deploy:status:
+    desc: Poll a pending Agent Runtime deploy
+    deps: [preflight]
+    cmds:
+      - agents-cli deploy --status --project "${GOOGLE_CLOUD_PROJECT}" --region "{{.REGION}}" --no-confirm-project
+
+  deploy:list:
+    desc: List Agent Runtime deployments in the project/region
+    deps: [preflight]
+    cmds:
+      - agents-cli deploy --list --project "${GOOGLE_CLOUD_PROJECT}" --region "{{.REGION}}" --no-confirm-project
+
+  deploy:dry-run:
+    desc: Print the deploy plan without applying it
+    deps: [preflight]
+    cmds:
+      - |
+        agents-cli deploy --dry-run \
+          --project "${GOOGLE_CLOUD_PROJECT}" \
+          --region "{{.REGION}}" \
+          --service-name "{{.SERVICE_NAME}}" \
+          --no-confirm-project
