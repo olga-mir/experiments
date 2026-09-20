@@ -41,6 +41,20 @@ task deploy:status     # if the CLI times out; the job keeps running server-side
 Do not commit `.env`, Terraform `env.tfvars`, or `deployment_metadata.json`
 (those files hold project and engine identifiers).
 
+## Offline evals (prompt collection)
+
+Agent Platform offline evals need prompt/response payloads on the
+`gen_ai.client.inference.operation.details` event. Deploys set:
+
+```
+OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=EVENT_ONLY
+```
+
+After a chat with the **updated** runtime, open Agent Platform → Agents →
+Evaluation and pick traces or sessions. Older sessions captured before this
+change will not have prompts.
+
 ## Studio leftover
 
 Agent Studio create/update can leave an Agent Runtime in `us-west1` named

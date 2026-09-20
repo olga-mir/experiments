@@ -58,12 +58,11 @@ resource "google_vertex_ai_reasoning_engine" "app" {
         value = "ping-aic-explainer"
       }
 
-      # Prompt/response content capture, off by default. Go: set "true" to log
-      # content to OTLP log events for the completions view. Python: content goes to
-      # GCS via the completion hook, so NO_CONTENT.
+      # Offline evals need prompt/response on inference events (EVENT_ONLY).
+      # See https://docs.cloud.google.com/gemini-enterprise-agent-platform/optimize/evaluation/evaluate-offline#telemetry_requirements
       env {
         name  = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
-        value = "NO_CONTENT"
+        value = "EVENT_ONLY"
       }
 
       env {
