@@ -6,56 +6,56 @@ Source: [Conversational analytics in BigQuery](https://docs.cloud.google.com/big
 
 Enable the Gemini in BigQuery and Gemini for Google Cloud APIs for the project.
 
-![Enable Gemini in Data Analytics APIs](assets/Screenshot%202026-09-20%20at%209.50.48%20am.png)
+<img src="assets/step_01.png" width="450" alt="Enable Gemini in Data Analytics APIs">
 
 Select the BigQuery tables and views the agent can query.
 
-![Select BigQuery sources](assets/Screenshot%202026-09-20%20at%2010.35.32%20am%20redacted.png)
+<img src="assets/step_02.png" width="700" alt="Select BigQuery sources">
 
 Save the agent in Conversational Analytics Studio and try a preview question.
 
-![Agent editor and preview](assets/Screenshot%202026-09-20%20at%2010.37.52%20am%20redacted.png)
+<img src="assets/step_03.png" width="700" alt="Agent editor and preview">
 
 Choose publish channels, including Agent Registry so Gemini Enterprise can import it.
 
-![Publishing channels](assets/Screenshot%202026-09-20%20at%2011.23.09%20am.png)
+<img src="assets/step_04.png" width="450" alt="Publishing channels">
 
 Confirm the agent is published to BigQuery, Conversational Analytics API, Data Studio, and Agent Registry.
 
-![Published successfully](assets/Screenshot%202026-09-20%20at%2011.23.32%20am.png)
+<img src="assets/step_05.png" width="450" alt="Published successfully">
 
 The publish dialog then shows the agent as registered in Agent Registry.
 
-![Registered in Agent Registry](assets/Screenshot%202026-09-20%20at%2011.26.32%20am.png)
+<img src="assets/step_06.png" width="450" alt="Registered in Agent Registry">
 
 Open the registered agent in Agent Platform Registry to inspect its card and ADK snippet.
 
-![Agent Registry overview](assets/Screenshot%202026-09-20%20at%2011.29.44%20am%20redacted.png)
+<img src="assets/step_07.png" width="700" alt="Agent Registry overview">
 
 Import the agent into a Gemini Enterprise app from Agent Registry.
 
-![Import agent into Gemini Enterprise](assets/Screenshot%202026-09-20%20at%2011.46.54%20am%20redacted.png)
+<img src="assets/step_08.png" width="700" alt="Import agent into Gemini Enterprise">
 
 The agent appears under From your organization in the Gemini Enterprise Agents picker.
 
-![Gemini Enterprise agents](assets/Screenshot%202026-09-20%20at%2011.47.32%20am.png)
+<img src="assets/step_09.png" width="700" alt="Gemini Enterprise agents">
 
 The first chat can prompt for extra authorization before queries run.
 
-![Additional authorization](assets/Screenshot%202026-09-20%20at%2011.48.50%20am.png)
+<img src="assets/step_10.png" width="700" alt="Additional authorization">
 
 After auth, the agent retrieves table context, runs SQL, and answers.
 
-![Query with retrieved context](assets/Screenshot%202026-09-20%20at%2011.49.29%20am%20redacted.png)
+<img src="assets/step_11.png" width="700" alt="Query with retrieved context">
 
 Follow-up questions can return structured result tables from the same dataset.
 
-![Tool-call result table](assets/Screenshot%202026-09-20%20at%2011.50.38%20am.png)
+<img src="assets/step_12.png" width="700" alt="Tool-call result table">
 
 Gemini Enterprise can collect thumbs-up feedback on the answer.
 
-![Feedback on the answer](assets/Screenshot%202026-09-20%20at%2011.50.55%20am.png)
+<img src="assets/step_13.png" width="450" alt="Feedback on the answer">
 
 Later turns can keep using the same agent for other breakdowns of the data.
 
-![Follow-up analysis](assets/Screenshot%202026-09-20%20at%2012.18.19%20pm.png)
+<img src="assets/step_14.png" width="700" alt="Follow-up analysis">
