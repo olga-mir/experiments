@@ -62,12 +62,12 @@ resource "google_vertex_ai_reasoning_engine" "app" {
       # See https://docs.cloud.google.com/gemini-enterprise-agent-platform/optimize/evaluation/evaluate-offline#telemetry_requirements
       env {
         name  = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
-        value = "EVENT_ONLY"
+        value = "SPAN_AND_EVENT"
       }
 
       env {
         name  = "ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"
-        value = "false"
+        value = "true"
       }
 
       env {

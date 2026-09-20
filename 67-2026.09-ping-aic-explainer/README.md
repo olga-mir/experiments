@@ -43,17 +43,22 @@ Do not commit `.env`, Terraform `env.tfvars`, or `deployment_metadata.json`
 
 ## Offline evals (prompt collection)
 
-Agent Platform offline evals need prompt/response payloads on the
-`gen_ai.client.inference.operation.details` event. Deploys set:
+The Console traces UI looks for **span attributes and/or GCS-uploaded
+completions**. `EVENT_ONLY` alone is not enough, and `agents-cli deploy`
+defaults `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`.
 
-```
-OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
-OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=EVENT_ONLY
-```
+`task deploy` now also:
 
-After a chat with the **updated** runtime, open Agent Platform → Agents →
-Evaluation and pick traces or sessions. Older sessions captured before this
-change will not have prompts.
+1. Creates `${GOOGLE_CLOUD_PROJECT}-ping-aic-explainer-logs` and grants the
+   Agent Runtime SA `roles/storage.objectUser`.
+2. Sets:
+   - `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT`
+   - `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true`
+   - `OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload`
+   - `OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://<bucket>/completions`
+
+Start a **new** session after that deploy. Older traces will still show the
+"prompt-response collection is not enabled" banner.
 
 ## Studio leftover
 

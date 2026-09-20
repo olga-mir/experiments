@@ -5,7 +5,6 @@ dotenv: [".env"]
 vars:
   REGION: '{{.REGION | default "us-central1"}}'
   SERVICE_NAME: ping-aic-explainer
-  TELEMETRY_ENV: 'OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental,OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=EVENT_ONLY,GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true'
 
 tasks:
   default:
@@ -32,6 +31,12 @@ tasks:
         fi
         echo "preflight ok project=${GOOGLE_CLOUD_PROJECT} location=${GOOGLE_CLOUD_LOCATION:-unset} deploy_region={{.REGION}}"
 
+  telemetry:bucket:
+    desc: Create GCS bucket and IAM for prompt/response uploads
+    deps: [preflight]
+    cmds:
+      - bash scripts/setup-telemetry-bucket.sh
+
   setup:
     desc: Install Python deps with uv via agents-cli
     cmds:
@@ -56,15 +61,18 @@ tasks:
       - uv run pytest tests/unit -q
 
   deploy:
-    desc: Deploy to Agent Runtime (needs GOOGLE_CLOUD_PROJECT)
-    deps: [preflight, setup]
+    desc: Deploy to Agent Runtime with prompt/response collection
+    deps: [preflight, setup, telemetry:bucket]
     cmds:
       - |
+        set -euo pipefail
+        BUCKET="${LOGS_BUCKET_NAME:-${GOOGLE_CLOUD_PROJECT}-ping-aic-explainer-logs}"
+        TELEMETRY_ENV="GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true,OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental,OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT,ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true,OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload,OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT=jsonl,LOGS_BUCKET_NAME=${BUCKET},OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://${BUCKET}/completions"
         agents-cli deploy \
           --project "${GOOGLE_CLOUD_PROJECT}" \
           --region "{{.REGION}}" \
           --service-name "{{.SERVICE_NAME}}" \
-          --update-env-vars "{{.TELEMETRY_ENV}}" \
+          --update-env-vars "${TELEMETRY_ENV}" \
           --no-confirm-project
 
   deploy:status:
@@ -84,9 +92,12 @@ tasks:
     deps: [preflight]
     cmds:
       - |
+        set -euo pipefail
+        BUCKET="${LOGS_BUCKET_NAME:-${GOOGLE_CLOUD_PROJECT}-ping-aic-explainer-logs}"
+        TELEMETRY_ENV="GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true,OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental,OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_AND_EVENT,ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true,OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload,OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT=jsonl,LOGS_BUCKET_NAME=${BUCKET},OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://${BUCKET}/completions"
         agents-cli deploy --dry-run \
           --project "${GOOGLE_CLOUD_PROJECT}" \
           --region "{{.REGION}}" \
           --service-name "{{.SERVICE_NAME}}" \
-          --update-env-vars "{{.TELEMETRY_ENV}}" \
+          --update-env-vars "${TELEMETRY_ENV}" \
           --no-confirm-project
