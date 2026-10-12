@@ -1,5 +1,10 @@
 # About
 
+> [!NOTE]
+> **Migrated to `playground-sre`**: The eBPF noisy-neighbour detector, userspace exporter, build tooling, and Kubernetes manifests have been migrated and productionized in [playground-sre (`workloads/ebpf-noisy-neighbour`)](https://github.com/olga-mir/playground-sre/tree/main/workloads/ebpf-noisy-neighbour).
+>
+> This directory now retains the research notes, investigation reports, analysis docs, and experiment run outcomes.
+
 Learning eBPF and the systems through eBPF lens at the same time.
 
 # Experiments
